@@ -2,6 +2,9 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
+// Other
+#include <sstream>
+
 // Nanobind
 // Core
 #include <nanobind/nanobind.h>
@@ -92,6 +95,12 @@ NB_MODULE(_pym3t_mod, m){
     // Bind Transform3fA in order to be able to create a Body object from Python
     nb::class_<Transform3fA>(m, "Transform3fA")
         .def(nb::init<const Matrix4f &>())
+        // NOTE: new
+        .def("__repr__", [](const Transform3fA &t) {
+            std::ostringstream oss;
+            oss << t.matrix();
+            return "Transform3fA(\n" + oss.str() + "\n)";
+        })
         ;
     
     // Body
@@ -102,6 +111,8 @@ NB_MODULE(_pym3t_mod, m){
              "name"_a, "geometry_path"_a, "geometry_unit_in_meter"_a,
              "geometry_counterclockwise"_a, "geometry_enable_culling"_a,
              "geometry2body_pose"_a)
+        // NOTE: new
+        .def_prop_rw("body2world_pose", &Body::body2world_pose, &Body::set_body2world_pose)
         ;
 
     // Link

@@ -28,7 +28,7 @@ def main():
         renderer_geometry=renderer_geometry,
     )
     tracker.AddViewer(color_viewer)
-
+    
     # Set up body
     body = pym3t.Body(
         name="ape",
@@ -55,25 +55,27 @@ def main():
         region_model=region_model,
     )
 
-    # # Set up link
+    # Set up link
     link = pym3t.Link(
         name="ape_link",
         body=body,
     )
     link.AddModality(region_modality)
-
+    
     # Set up optimizer
     optimizer = pym3t.Optimizer(
         name="ape_optimizer",
-        root_link=link)
+        root_link=link,
+    )
     tracker.AddOptimizer(optimizer)
     
+    # GT pose read from the dataset
     body2world_pose = pym3t.Transform3fA(
         np.array([
-            [0.93628694, -0.21683237, 0.2763161, 0.33606376],
-            [0.26780614, 0.9497253, -0.16217667, 0.11129225],
-            [-0.22725927, 0.22584289, 0.94728488, 0.72478403],
-            [0., 0., 0., 1.],
+            [0.997056, -0.04307, 0.0634383, 0.019051],
+            [0.043157, 0.999068, 0, 0.00408901],
+            [-0.0633792, 0.0027378, 0.997986, 0.549],
+            [0, 0, 0, 1]
         ], dtype=np.float32)
     )
 
@@ -85,11 +87,12 @@ def main():
         reset_joint_poses=False,
     )
     tracker.AddDetector(detector)
-
+    
     # Start tracking
     if not tracker.SetUp():
         return -1
-    if not tracker.RunTrackerProcess(False, False):
+
+    if not tracker.RunTrackerProcess(True, True): 
         return -1
     
     return 0
