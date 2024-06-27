@@ -52,11 +52,23 @@ NB_MODULE(_pym3t_mod, m){
         .def("SetUp", &Tracker::SetUp, "set_up_all_objects"_a=true)
         .def("RunTrackerProcess", &Tracker::RunTrackerProcess,
              "execute_detection"_a=true, "start_tracking"_a=true,
-            // NOTE: ok ? None, but not bound types
              "names_detecting"_a=nullptr, "names_starting"_a=nullptr)
         .def("AddViewer", &Tracker::AddViewer)
         .def("AddDetector", &Tracker::AddDetector)
         .def("AddOptimizer", &Tracker::AddOptimizer)
+        .def("UpdateCameras", &Tracker::UpdateCameras)
+        .def("UpdateSubscribers", &Tracker::UpdateSubscribers)
+        .def("CalculateConsistentPoses", &Tracker::CalculateConsistentPoses)
+        .def("ExecuteDetectingStep", &Tracker::ExecuteDetectingStep)
+        .def("ExecuteStartingStep", &Tracker::ExecuteStartingStep)
+        .def("ExecuteTrackingStep", &Tracker::ExecuteTrackingStep)
+        .def("UpdatePublishers", &Tracker::UpdatePublishers)
+        .def("UpdateViewers", &Tracker::UpdateViewers)
+        .def("ExecuteDetection", &Tracker::ExecuteDetection,
+             "start_tracking"_a, "names_detecting"_a=nullptr,
+             "names_starting"_a=nullptr)
+        .def_prop_ro("set_up", &Tracker::set_up)
+        .def_prop_ro("name", &Tracker::name)
         ;
     
     // RendererGeometry
@@ -72,10 +84,22 @@ NB_MODULE(_pym3t_mod, m){
     // and binding of child classes
     nb::class_<ColorCamera, Camera>(m, "ColorCamera");
 
+    // Intrinsic parameters of a camera
+    nb::class_<Intrinsics>(m, "Intrinsics")
+        .def(nb::init<float, float, float, float, int, int>(),
+             "fu"_a, "fv"_a, "ppu"_a, "ppv"_a, "width"_a, "height"_a)
+        ;
+
     // LoaderColorCamera
     nb::class_<LoaderColorCamera, ColorCamera>(m, "LoaderColorCamera")
         .def(nb::init<const std::string &, const std::filesystem::path &>(),
              "name"_a, "metafile_path"_a)
+        .def(nb::init<const std::string &, const std::filesystem::path &,
+                      const Intrinsics &, const std::string &, int, int,
+                      const std::string &, const std::string &>(),
+             "name"_a, "load_directory"_a, "intrinsics"_a,
+             "image_name_pre"_a="", "load_index"_a=0, "n_leading_zeros"_a=0,
+             "image_name_post"_a="", "load_image_type"_a="png")
         ;
     
     // Viewer -> not constructible, just to enable automatic downcasting
@@ -95,7 +119,6 @@ NB_MODULE(_pym3t_mod, m){
     // Bind Transform3fA in order to be able to create a Body object from Python
     nb::class_<Transform3fA>(m, "Transform3fA")
         .def(nb::init<const Matrix4f &>())
-        // NOTE: new
         .def("__repr__", [](const Transform3fA &t) {
             std::ostringstream oss;
             oss << t.matrix();
@@ -111,7 +134,6 @@ NB_MODULE(_pym3t_mod, m){
              "name"_a, "geometry_path"_a, "geometry_unit_in_meter"_a,
              "geometry_counterclockwise"_a, "geometry_enable_culling"_a,
              "geometry2body_pose"_a)
-        // NOTE: new
         .def_prop_rw("body2world_pose", &Body::body2world_pose, &Body::set_body2world_pose)
         ;
 
