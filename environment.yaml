@@ -1,0 +1,23 @@
+name: pym3t
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.10
+  - compilers
+  - cmake
+  - scikit-build
+  - pyyaml
+  - opencv
+  - mesa-libgl-devel-cos7-x86_64 
+  - mesa-dri-drivers-cos7-x86_64 
+  - libxcb
+  - glew
+  - glfw
+  - librealsense
+  - quaternion
+  - eigen
+  - pip
+  - pip:
+    - nanobind

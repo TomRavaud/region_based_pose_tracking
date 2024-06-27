@@ -1,0 +1,31 @@
+%YAML:1.2
+load_directory: "../data/RBOT/ape/frames/"
+intrinsics:
+  f_u: 650.048
+  f_v: 647.183
+  pp_x: 324.328
+  pp_y: 257.323
+  width: 640
+  height: 512
+
+camera2world_pose: !!opencv-matrix
+  rows: 4
+  cols: 4
+  dt: d
+  data: [0.9603984, -0.17622313, 0.21582473, 0.2,
+         0.21582473, 0.9603984, -0.17622313, 0.2,
+         -0.17622313, 0.21582473, 0.9603984, 0.2,
+         0., 0., 0., 1.]
+  # data: [ 1., 0, 0, 0,
+  #         0, 1., 0, 0,
+  #         0, 0, 1., 0,
+  #         0, 0, 0, 1. ]
+save_directory: "./out/"
+save_index: 0
+save_image_type: "png"
+save_images: 0
+image_name_pre: "a_regular"
+load_index: 0
+n_leading_zeros: 4
+image_name_post: ""
+load_image_type: "png"
