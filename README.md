@@ -28,3 +28,9 @@ Finally, you can install the package using the following command:
 ```bash
 pip install .
 ```
+
+To remove the conda environment, you can use the following command:
+
+```bash
+conda remove -n pym3t --all
+```
