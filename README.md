@@ -23,10 +23,11 @@ Then, you need to install the required dependencies. The project uses conda to m
 conda env create -f environment.yaml
 ```
 
-Finally, you can install the package using the following command:
+Finally, you can install our custom packages using the following commands:
 
 ```bash
-pip install .
+pip install ./m3t_bindings
+pip install ./m3t_ext
 ```
 
 To remove the conda environment, you can use the following command:
@@ -34,3 +35,10 @@ To remove the conda environment, you can use the following command:
 ```bash
 conda remove -n pym3t --all
 ```
+
+## Usage
+
+You can run the provided example using the following command:
+
+```bash
+python -m pym3t_ext.scripts.example_rbot
