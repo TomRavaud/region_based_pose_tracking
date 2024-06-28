@@ -53,9 +53,19 @@ execute_process(
 list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
 find_package(nanobind CONFIG REQUIRED)
 
+# Create library including the region modality base class
+add_library(m3t_and_region_modality_base src/pym3t/region_modality_base.cpp include/pym3t/region_modality_base.h)
+target_compile_features(m3t_and_region_modality_base PUBLIC cxx_std_17)
+target_include_directories(
+  m3t_and_region_modality_base
+  PUBLIC $<INSTALL_INTERFACE:include>
+         $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+         $<BUILD_INTERFACE:${m3t_SOURCE_DIR}/include>)
+target_link_libraries(m3t_and_region_modality_base PUBLIC m3t)
+
 
 nanobind_add_module(_pym3t_mod MODULE src/pym3t/pym3t.cpp)
-target_link_libraries(_pym3t_mod PUBLIC m3t)
+target_link_libraries(_pym3t_mod PUBLIC m3t_and_region_modality_base)
 target_include_directories(
   _pym3t_mod PUBLIC $<INSTALL_INTERFACE:include>
                     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>)

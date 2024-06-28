@@ -30,6 +30,9 @@
 #include <m3t/tracker.h>
 #include <m3t/loader_camera.h>
 
+// pym3t
+#include "pym3t/region_modality_base.h"
+
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -190,5 +193,13 @@ NB_MODULE(_pym3t_mod, m){
         .def(nb::init<const std::string &, const std::shared_ptr<Optimizer> &,
                       const Transform3fA &, bool>(),
              "name"_a, "optimizer"_a, "link2world_pose"_a, "reset_joint_poses"_a)
+        ;
+    
+    // RegionModalityBase
+    nb::class_<RegionModalityBase, Modality>(m, "RegionModalityBase")
+        .def(nb::init<const std::string &, const std::shared_ptr<Body> &,
+                      const std::shared_ptr<ColorCamera> &,
+                      const std::shared_ptr<RegionModel> &>(),
+             "name"_a, "body"_a, "color_camera"_a, "region_model"_a)
         ;
 }

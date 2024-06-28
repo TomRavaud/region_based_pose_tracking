@@ -2,10 +2,12 @@
 from time import time
 
 # Third-party libraries
-import pym3t
 import cv2
 from tabulate import tabulate
 import numpy as np
+
+# Custom libraries
+import pym3t
 
 
 class PyTracker(pym3t.Tracker):
@@ -149,4 +151,3 @@ class PyTracker(pym3t.Tracker):
             print(output)
         
         return True
-

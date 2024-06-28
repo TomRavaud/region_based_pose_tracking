@@ -2,6 +2,7 @@
 import numpy as np
 import pym3t
 from pym3t_ext.components.pytracker import PyTracker
+from pym3t_ext.components.deep_region_modality import DeepRegionModality
 
 
 DATASET_PATH = "data/RBOT/"
@@ -81,6 +82,14 @@ def main():
         color_camera=color_camera,
         region_model=region_model,
     )
+    
+    # Set up deep region modality
+    deep_region_modality = DeepRegionModality(
+        name=f"{OBJECT_NAME}_deep_region_modality",
+        body=body,
+        color_camera=color_camera,
+        region_model=region_model,
+    )
 
     # Set up link
     link = pym3t.Link(
@@ -111,7 +120,7 @@ def main():
 
     if not tracker.run_tracker_process(
         execute_detection_and_start_tracking=True,
-        display_images=False,
+        display_images=True,
         stop_at_each_image=True,
     ):
         return -1
