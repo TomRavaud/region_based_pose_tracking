@@ -82,14 +82,17 @@ def main():
         color_camera=color_camera,
         region_model=region_model,
     )
-    
+    # Set visualization options
+    region_modality.visualize_lines_correspondence = False
+    region_modality.visualize_points_optimization = False
+
     # Set up deep region modality
-    deep_region_modality = DeepRegionModality(
-        name=f"{OBJECT_NAME}_deep_region_modality",
-        body=body,
-        color_camera=color_camera,
-        region_model=region_model,
-    )
+    # region_modality = DeepRegionModality(
+    #     name=f"{OBJECT_NAME}_deep_region_modality",
+    #     body=body,
+    #     color_camera=color_camera,
+    #     region_model=region_model,
+    # )
 
     # Set up link
     link = pym3t.Link(
@@ -120,7 +123,7 @@ def main():
 
     if not tracker.run_tracker_process(
         execute_detection_and_start_tracking=True,
-        display_images=True,
+        display_images=False,
         stop_at_each_image=True,
     ):
         return -1

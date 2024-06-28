@@ -174,6 +174,12 @@ NB_MODULE(_pym3t_mod, m){
                       const std::shared_ptr<ColorCamera> &,
                       const std::shared_ptr<RegionModel> &>(),
              "name"_a, "body"_a, "color_camera"_a, "region_model"_a)
+        .def_prop_rw("visualize_lines_correspondence",
+                     &RegionModality::visualize_lines_correspondence,
+                     &RegionModality::set_visualize_lines_correspondence)
+        .def_prop_rw("visualize_points_optimization",
+                     &RegionModality::visualize_points_optimization,
+                     &RegionModality::set_visualize_points_optimization)
         ;
     
     // Optimizer
