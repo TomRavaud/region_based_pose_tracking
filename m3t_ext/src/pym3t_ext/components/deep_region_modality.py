@@ -6,7 +6,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
     """
     Extension of the pym3t.RegionModalityBase class.
     """
-    def CalculateCorrespondences(self, iteration: int, corr_iteration: int) -> bool:
+    def calculate_correspondences(self, iteration: int, corr_iteration: int) -> bool:
         """Calculate the correspondence lines data (center, normal, segment
         probabilities, etc.) for a given iteration. It is an override of the
         pym3t.RegionModalityBase::CalculateCorrespondences method.

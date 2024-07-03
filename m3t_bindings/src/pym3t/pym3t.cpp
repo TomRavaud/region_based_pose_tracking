@@ -49,7 +49,10 @@ struct PyRegionModalityBase : RegionModalityBase {
     NB_TRAMPOLINE(RegionModalityBase, 1);
 
     bool CalculateCorrespondences(int iteration, int corr_iteration) override {
-        NB_OVERRIDE(CalculateCorrespondences, iteration, corr_iteration);
+        NB_OVERRIDE_NAME(
+            "calculate_correspondences",
+            CalculateCorrespondences,
+            iteration, corr_iteration);
     }
 };
 
@@ -257,7 +260,6 @@ NB_MODULE(_pym3t_mod, m){
                       const std::shared_ptr<ColorCamera> &,
                       const std::shared_ptr<RegionModel> &>(),
              "name"_a, "body"_a, "color_camera"_a, "region_model"_a)
-        .def("CalculateCorrespondences", &RegionModalityBase::CalculateCorrespondences)
         .def("IsSetup", &RegionModalityBase::IsSetup)
         .def("PrecalculatePoseVariables", &RegionModalityBase::PrecalculatePoseVariables)
         .def("PrecalculateIterationDependentVariables",
