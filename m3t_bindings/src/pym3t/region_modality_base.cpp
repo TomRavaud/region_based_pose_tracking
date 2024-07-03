@@ -385,82 +385,87 @@ bool RegionModalityBase::StartModality(int iteration, int corr_iteration) {
   return true;
 }
 
-bool RegionModalityBase::CalculateCorrespondences(int iteration,
-                                              int corr_iteration) {
-  if (!IsSetup()) return false;
-
-  PrecalculatePoseVariables();
-  PrecalculateIterationDependentVariables(corr_iteration);
-
-  // Check if body is visible and fetch images from renderers
-  bool body_visible_depth;
-  if (model_occlusions_) {
-    body_visible_depth = depth_renderer_ptr_->IsBodyVisible(body_ptr_->name());
-    if (body_visible_depth) depth_renderer_ptr_->FetchDepthImage();
-  }
-  bool body_visible_silhouette;
-  if (use_region_checking_) {
-    body_visible_silhouette =
-        silhouette_renderer_ptr_->IsBodyVisible(body_ptr_->name());
-    if (body_visible_silhouette)
-      silhouette_renderer_ptr_->FetchSilhouetteImage();
-  }
-
-  // Search closest template view
-  const RegionModel::View *view;
-  region_model_ptr_->GetClosestView(body2camera_pose_, &view);
-  auto &data_model_points{view->data_points};
-
-  // Scale number of lines with contour_length ratio
-  int n_lines = n_lines_max_;
-  if (use_adaptive_coverage_) {
-    if (reference_contour_length_ > 0.0f)
-      n_lines = n_lines_max_ * std::min(1.0f, view->contour_length /
-                                                  reference_contour_length_);
-    else
-      n_lines = n_lines_max_ * view->contour_length /
-                region_model_ptr_->max_contour_length();
-  }
-  if (n_lines > data_model_points.size()) {
-    std::cerr << "Number of model points too small: "
-              << data_model_points.size() << " < " << n_lines << std::endl;
-    n_lines = data_model_points.size();
-  }
-
-  // Differentiate cases with and without occlusion handling
-  std::vector<float> segment_probabilities_f(line_length_in_segments_);
-  std::vector<float> segment_probabilities_b(line_length_in_segments_);
-  for (int j = 0; j < 2; ++j) {
-    data_lines_.clear();
-    bool handle_occlusions =
-        j == 0 && (iteration - first_iteration_) >= n_unoccluded_iterations_;
-
-    // Iterate over n_lines
-    for (int i = 0; i < n_lines; ++i) {
-      DataLine data_line;
-      CalculateBasicLineData(data_model_points[i], &data_line);
-      if (!IsLineValid(
-              data_line, use_region_checking_ && body_visible_silhouette,
-              handle_occlusions && measure_occlusions_,
-              handle_occlusions && model_occlusions_ && body_visible_depth))
-        continue;
-      if (!CalculateSegmentProbabilities(
-              data_line.center_u, data_line.center_v, data_line.normal_u,
-              data_line.normal_v, &segment_probabilities_f,
-              &segment_probabilities_b, &data_line.normal_component_to_scale,
-              &data_line.delta_r))
-        continue;
-      CalculateDistribution(segment_probabilities_f, segment_probabilities_b,
-                            &data_line.distribution);
-
-      CalculateDistributionMoments(data_line.distribution, &data_line.mean,
-                                   &data_line.measured_variance);
-      data_lines_.push_back(std::move(data_line));
-    }
-    if (data_lines_.size() >= min_n_unoccluded_lines_) break;
-  }
-  return true;
+bool RegionModalityBase::CalculateCorrespondences(int iteration, int corr_iteration) {
+  std::cerr << "RegionModalityBase::CalculateCorrespondences not implemented" << std::endl;
+  return false;
 }
+
+// bool RegionModalityBase::CalculateCorrespondences(int iteration,
+//                                               int corr_iteration) {
+//   if (!IsSetup()) return false;
+
+//   PrecalculatePoseVariables();
+//   PrecalculateIterationDependentVariables(corr_iteration);
+
+//   // Check if body is visible and fetch images from renderers
+//   bool body_visible_depth;
+//   if (model_occlusions_) {
+//     body_visible_depth = depth_renderer_ptr_->IsBodyVisible(body_ptr_->name());
+//     if (body_visible_depth) depth_renderer_ptr_->FetchDepthImage();
+//   }
+//   bool body_visible_silhouette;
+//   if (use_region_checking_) {
+//     body_visible_silhouette =
+//         silhouette_renderer_ptr_->IsBodyVisible(body_ptr_->name());
+//     if (body_visible_silhouette)
+//       silhouette_renderer_ptr_->FetchSilhouetteImage();
+//   }
+
+//   // Search closest template view
+//   const RegionModel::View *view;
+//   region_model_ptr_->GetClosestView(body2camera_pose_, &view);
+//   auto &data_model_points{view->data_points};
+
+//   // Scale number of lines with contour_length ratio
+//   int n_lines = n_lines_max_;
+//   if (use_adaptive_coverage_) {
+//     if (reference_contour_length_ > 0.0f)
+//       n_lines = n_lines_max_ * std::min(1.0f, view->contour_length /
+//                                                   reference_contour_length_);
+//     else
+//       n_lines = n_lines_max_ * view->contour_length /
+//                 region_model_ptr_->max_contour_length();
+//   }
+//   if (n_lines > data_model_points.size()) {
+//     std::cerr << "Number of model points too small: "
+//               << data_model_points.size() << " < " << n_lines << std::endl;
+//     n_lines = data_model_points.size();
+//   }
+
+//   // Differentiate cases with and without occlusion handling
+//   std::vector<float> segment_probabilities_f(line_length_in_segments_);
+//   std::vector<float> segment_probabilities_b(line_length_in_segments_);
+//   for (int j = 0; j < 2; ++j) {
+//     data_lines_.clear();
+//     bool handle_occlusions =
+//         j == 0 && (iteration - first_iteration_) >= n_unoccluded_iterations_;
+
+//     // Iterate over n_lines
+//     for (int i = 0; i < n_lines; ++i) {
+//       DataLine data_line;
+//       CalculateBasicLineData(data_model_points[i], &data_line);
+//       if (!IsLineValid(
+//               data_line, use_region_checking_ && body_visible_silhouette,
+//               handle_occlusions && measure_occlusions_,
+//               handle_occlusions && model_occlusions_ && body_visible_depth))
+//         continue;
+//       if (!CalculateSegmentProbabilities(
+//               data_line.center_u, data_line.center_v, data_line.normal_u,
+//               data_line.normal_v, &segment_probabilities_f,
+//               &segment_probabilities_b, &data_line.normal_component_to_scale,
+//               &data_line.delta_r))
+//         continue;
+//       CalculateDistribution(segment_probabilities_f, segment_probabilities_b,
+//                             &data_line.distribution);
+
+//       CalculateDistributionMoments(data_line.distribution, &data_line.mean,
+//                                    &data_line.measured_variance);
+//       data_lines_.push_back(std::move(data_line));
+//     }
+//     if (data_lines_.size() >= min_n_unoccluded_lines_) break;
+//   }
+//   return true;
+// }
 
 bool RegionModalityBase::VisualizeCorrespondences(int save_idx) {
   if (!IsSetup()) return false;

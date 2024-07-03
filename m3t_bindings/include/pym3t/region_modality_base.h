@@ -28,6 +28,7 @@ class RegionModalityBase : public Modality {
   static constexpr int kNRegionStride = 5;
   static constexpr float kRegionOffset = 2.0f;
 
+ public:
   // Data for correspondence line calculated during CalculateCorrespondences
   struct DataLine {
     Eigen::Vector3f center_f_body{};
@@ -46,7 +47,6 @@ class RegionModalityBase : public Modality {
     float measured_variance = 0.0f;
   };
 
- public:
   // Constructors and setup methods
   RegionModalityBase(const std::string &name, const std::shared_ptr<Body> &body_ptr,
                  const std::shared_ptr<ColorCamera> &color_camera_ptr,
@@ -129,7 +129,7 @@ class RegionModalityBase : public Modality {
 
   // Main methods
   bool StartModality(int iteration, int corr_iteration) override;
-  bool CalculateCorrespondences(int iteration, int corr_iteration) override;
+  virtual bool CalculateCorrespondences(int iteration, int corr_iteration) override;
   bool VisualizeCorrespondences(int save_idx) override;
   bool CalculateGradientAndHessian(int iteration, int corr_iteration,
                                    int opt_iteration) override;
@@ -203,6 +203,32 @@ class RegionModalityBase : public Modality {
   float visualization_min_depth() const;
   float visualization_max_depth() const;
 
+  // Made public to allow access from Python
+  bool IsSetup() const;
+  void PrecalculatePoseVariables();
+  void PrecalculateIterationDependentVariables(int corr_iteration);
+  void CalculateBasicLineData(const RegionModel::DataPoint &data_point,
+                              DataLine *data_line) const;
+  bool IsLineValid(const DataLine &data_line, bool use_region_checking,
+                   bool measure_occlusions, bool model_occlusions) const;
+  bool CalculateSegmentProbabilities(
+      float center_u, float center_v, float normal_u, float normal_v,
+      std::vector<float> *segment_probabilities_f,
+      std::vector<float> *segment_probabilities_b,
+      float *normal_component_to_scale, float *delta_r) const;
+  void CalculateDistribution(const std::vector<float> &segment_probabilities_f,
+                             const std::vector<float> &segment_probabilities_b,
+                             std::vector<float> *distribution) const;
+  void CalculateDistributionMoments(const std::vector<float> &distribution,
+                                    float *mean, float *variance) const;
+  int first_iteration() const { return first_iteration_; }
+  int line_length_in_segments() const { return line_length_in_segments_; }
+  std::vector<DataLine> &data_lines() { return data_lines_; }
+  void AddDataLine(const DataLine &data_line) { data_lines_.push_back(std::move(data_line)); }
+  void ClearDataLines() { data_lines_.clear(); }
+  Transform3fA body2camera_pose() const { return body2camera_pose_; }
+
+
  private:
   // Helper method for setup
   bool LoadMetaData();
@@ -217,8 +243,6 @@ class RegionModalityBase : public Modality {
   void PrecalculateCameraVariables();
   bool PrecalculateModelVariables();
   void PrecalculateRendererVariables();
-  void PrecalculatePoseVariables();
-  void PrecalculateIterationDependentVariables(int corr_iteration);
 
   // Helper methods for histogram calculation
   void AddLinePixelColorsToTempHistograms(bool handle_occlusions);
@@ -226,30 +250,16 @@ class RegionModalityBase : public Modality {
                              float normal_v, float *dynamic_foreground_distance,
                              float *dynamic_background_distance) const;
 
-  // Helper methods for CalculateCorrespondences
-  void CalculateBasicLineData(const RegionModel::DataPoint &data_point,
-                              DataLine *data_line) const;
-  bool IsLineValid(const DataLine &data_line, bool use_region_checking,
-                   bool measure_occlusions, bool model_occlusions) const;
+  // Helper methods for CalculateCorrespondences  
   bool IsDynamicLineRegionSufficient(float center_u, float center_v,
                                      float normal_u, float normal_v) const;
   bool IsLineUnoccludedMeasured(const Eigen::Vector3f &center_f_body,
                                 float depth_offset) const;
   bool IsLineUnoccludedModeled(float center_u, float center_v, float depth,
-                               float depth_offset) const;
-  bool CalculateSegmentProbabilities(
-      float center_u, float center_v, float normal_u, float normal_v,
-      std::vector<float> *segment_probabilities_f,
-      std::vector<float> *segment_probabilities_b,
-      float *normal_component_to_scale, float *delta_r) const;
+                               float depth_offset) const; 
   void MultiplyPixelColorProbability(const cv::Vec3b &pixel_color,
                                      float *probability_f,
-                                     float *probability_b) const;
-  void CalculateDistribution(const std::vector<float> &segment_probabilities_f,
-                             const std::vector<float> &segment_probabilities_b,
-                             std::vector<float> *distribution) const;
-  void CalculateDistributionMoments(const std::vector<float> &distribution,
-                                    float *mean, float *variance) const;
+                                     float *probability_b) const; 
 
   // Helper methods for visualization
   void ShowAndSaveImage(const std::string &title, int save_index,
@@ -276,7 +286,6 @@ class RegionModalityBase : public Modality {
 
   // Other helper methods
   static float MinAbsValueWithSignOfValue1(float value_1, float abs_value_2);
-  bool IsSetup() const;
 
   // Internal data objects
   std::vector<DataLine> data_lines_;

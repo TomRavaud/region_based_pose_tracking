@@ -14,8 +14,11 @@
 #include <nanobind/stl/filesystem.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/array.h>
+#include <nanobind/stl/vector.h>
 #include <nanobind/eigen/dense.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/tuple.h>
+#include <nanobind/trampoline.h>
 
 // M3T
 #include <m3t/common.h>
@@ -38,6 +41,17 @@ namespace nb = nanobind;
 using namespace nb::literals;
 using namespace m3t;
 using namespace Eigen;
+
+
+// Define a trampoline for the RegionModalityBase class in order to be able to
+// override the CalculateCorrespondences method in Python
+struct PyRegionModalityBase : RegionModalityBase {
+    NB_TRAMPOLINE(RegionModalityBase, 1);
+
+    bool CalculateCorrespondences(int iteration, int corr_iteration) override {
+        NB_OVERRIDE(CalculateCorrespondences, iteration, corr_iteration);
+    }
+};
 
 
 NB_MODULE(_pym3t_mod, m){
@@ -138,6 +152,7 @@ NB_MODULE(_pym3t_mod, m){
              "geometry_counterclockwise"_a, "geometry_enable_culling"_a,
              "geometry2body_pose"_a)
         .def_prop_rw("body2world_pose", &Body::body2world_pose, &Body::set_body2world_pose)
+        .def_prop_ro("name", &Body::name)
         ;
 
     // Link
@@ -153,6 +168,16 @@ NB_MODULE(_pym3t_mod, m){
         .def("AddModality", &Link::AddModality)
         ;
     
+    // View structure
+    nb::class_<RegionModel::View>(m, "View")
+        .def_ro("data_points", &RegionModel::View::data_points)
+        .def_ro("contour_length", &RegionModel::View::contour_length)
+        ;
+    
+    // DataPoint structure
+    nb::class_<RegionModel::DataPoint>(m, "DataPoint")
+        ;
+    
     // RegionModel
     nb::class_<RegionModel>(m, "RegionModel")
         .def(nb::init<const std::string &, const std::shared_ptr<Body> &,
@@ -162,6 +187,16 @@ NB_MODULE(_pym3t_mod, m){
              "n_divides"_a=4, "n_points_max"_a=200, "max_radius_depth_offset"_a=0.05f,
              "stride_depth_offset"_a=0.002f, "use_random_seed"_a=false,
              "image_size"_a=2000)
+        // Use a lambda as a workaround because the pointer to pointer is not supported
+        // by nanobind
+        .def("GetClosestView",
+             [](const RegionModel &self, const Transform3fA &body2camera_pose) {
+                    const RegionModel::View *closest_view;
+                    // const RegionModel::View* closest_view = nullptr;
+                    bool result = self.GetClosestView(body2camera_pose, &closest_view);
+                    return std::make_tuple(result, closest_view);
+             }, nb::rv_policy::copy)
+        .def_prop_ro("max_contour_length", &RegionModel::max_contour_length)
         ;
 
     // Modality -> not constructible, just to enable automatic downcasting
@@ -201,11 +236,114 @@ NB_MODULE(_pym3t_mod, m){
              "name"_a, "optimizer"_a, "link2world_pose"_a, "reset_joint_poses"_a)
         ;
     
+    // DataLine structure
+    nb::class_<RegionModalityBase::DataLine>(m, "DataLine")
+        .def(nb::init<>())
+        .def_rw("center_u", &RegionModalityBase::DataLine::center_u)
+        .def_rw("center_v", &RegionModalityBase::DataLine::center_v)
+        .def_rw("normal_u", &RegionModalityBase::DataLine::normal_u)
+        .def_rw("normal_v", &RegionModalityBase::DataLine::normal_v)
+        .def_rw("normal_component_to_scale",
+                     &RegionModalityBase::DataLine::normal_component_to_scale)
+        .def_rw("delta_r", &RegionModalityBase::DataLine::delta_r)
+        .def_rw("distribution", &RegionModalityBase::DataLine::distribution)
+        .def_rw("mean", &RegionModalityBase::DataLine::mean)
+        .def_rw("measured_variance", &RegionModalityBase::DataLine::measured_variance)
+        ;
+    
     // RegionModalityBase
-    nb::class_<RegionModalityBase, Modality>(m, "RegionModalityBase")
+    nb::class_<RegionModalityBase, Modality, PyRegionModalityBase>(m, "RegionModalityBase")
         .def(nb::init<const std::string &, const std::shared_ptr<Body> &,
                       const std::shared_ptr<ColorCamera> &,
                       const std::shared_ptr<RegionModel> &>(),
              "name"_a, "body"_a, "color_camera"_a, "region_model"_a)
+        .def("CalculateCorrespondences", &RegionModalityBase::CalculateCorrespondences)
+        .def("IsSetup", &RegionModalityBase::IsSetup)
+        .def("PrecalculatePoseVariables", &RegionModalityBase::PrecalculatePoseVariables)
+        .def("PrecalculateIterationDependentVariables",
+             &RegionModalityBase::PrecalculateIterationDependentVariables)
+        .def("CalculateBasicLineData", &RegionModalityBase::CalculateBasicLineData)
+        .def("IsLineValid", &RegionModalityBase::IsLineValid)
+        // Wrapper lambda function to avoid the mutable reference issue with
+        // type casters (segment_probabilities_i is a std::vector<>,
+        // data_line.normal_component_to_scale and data_line.delta_r are float).
+        // segment_probabilities_i are returned and data_line which is of bound
+        // type DataLine is passed instead of its fields (bound types do not suffer
+        // from the mutable reference issue)
+        .def("CalculateSegmentProbabilities", [](
+            const RegionModalityBase &self,
+            std::vector<float> *segment_probabilities_f,
+            std::vector<float> *segment_probabilities_b,
+            RegionModalityBase::DataLine &data_line) {
+                bool result = self.CalculateSegmentProbabilities(
+                    data_line.center_u, data_line.center_v,
+                    data_line.normal_u, data_line.normal_v,
+                    segment_probabilities_f, segment_probabilities_b,
+                    &data_line.normal_component_to_scale, &data_line.delta_r);
+                return std::make_tuple(
+                    result,
+                    segment_probabilities_f,
+                    segment_probabilities_b);
+            })
+        // Pass bound type (DataLine) to avoid the mutable reference issue
+        // with type casters (data_line.distribution is a std::vector<>)
+        .def("CalculateDistribution", [](
+            const RegionModalityBase &self,
+            const std::vector<float> &segment_probabilities_f,
+            const std::vector<float> &segment_probabilities_b,
+            RegionModalityBase::DataLine &data_line) {
+                self.CalculateDistribution(
+                    segment_probabilities_f,
+                    segment_probabilities_b,
+                    &data_line.distribution);
+            })
+        // Pass bound type (DataLine) to avoid the mutable reference issue
+        // with type casters (data_line.mean and data_line.measured_variance are float)
+        .def("CalculateDistributionMoments", [](
+            const RegionModalityBase &self,
+            RegionModalityBase::DataLine &data_line) {
+                self.CalculateDistributionMoments(
+                    data_line.distribution,
+                    &data_line.mean,
+                    &data_line.measured_variance);
+            })
+        // New methods to allow data lines manipulation from Python
+        .def("AddDataLine", &RegionModalityBase::AddDataLine)
+        .def("ClearDataLines", &RegionModalityBase::ClearDataLines)
+
+        .def_prop_ro("body", &RegionModalityBase::body_ptr)
+        .def_prop_ro("model_occlusions", &RegionModalityBase::model_occlusions)
+        .def_prop_ro("depth_renderer", &RegionModalityBase::depth_renderer_ptr)
+        .def_prop_ro("silhouette_renderer", &RegionModalityBase::silhouette_renderer_ptr)
+        .def_prop_ro("region_model", &RegionModalityBase::region_model_ptr)
+        .def_prop_ro("first_iteration", &RegionModalityBase::first_iteration)
+        .def_prop_ro("n_lines_max", &RegionModalityBase::n_lines_max)
+        .def_prop_ro("use_adaptive_coverage", &RegionModalityBase::use_adaptive_coverage)
+        .def_prop_ro("reference_contour_length", &RegionModalityBase::reference_contour_length)
+        .def_prop_ro("use_region_checking", &RegionModalityBase::use_region_checking)
+        .def_prop_ro("n_unoccluded_iterations", &RegionModalityBase::n_unoccluded_iterations)
+        .def_prop_ro("measure_occlusions", &RegionModalityBase::measure_occlusions)
+        .def_prop_ro("min_n_unoccluded_lines", &RegionModalityBase::min_n_unoccluded_lines)
+        .def_prop_ro("line_length_in_segments", &RegionModalityBase::line_length_in_segments)
+        .def_prop_ro("body2camera_pose", &RegionModalityBase::body2camera_pose)
+        .def_prop_ro("data_lines", &RegionModalityBase::data_lines)
         ;
+    
+    // Renderer -> not constructible, just to enable automatic downcasting
+    // and binding of child classes
+    nb::class_<Renderer>(m, "Renderer");
+    // FocusedRenderer -> not constructible, just to enable automatic downcasting
+    // and binding of child classes
+    nb::class_<FocusedRenderer, Renderer>(m, "FocusedRenderer");
+    // FocusedDepthRenderer
+    nb::class_<FocusedDepthRenderer, FocusedRenderer>(m, "FocusedDepthRenderer")
+        .def("IsBodyVisible", &FocusedDepthRenderer::IsBodyVisible)
+        .def("FetchDepthImage", &FocusedDepthRenderer::FetchDepthImage)
+        ;
+    
+    // FocusedSilhouetteRenderer
+    nb::class_<FocusedSilhouetteRenderer, FocusedDepthRenderer>(m, "FocusedSilhouetteRenderer")
+        .def("IsBodyVisible", &FocusedSilhouetteRenderer::IsBodyVisible)
+        .def("FetchSilhouetteImage", &FocusedSilhouetteRenderer::FetchSilhouetteImage)
+        ; 
 }

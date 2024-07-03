@@ -23,7 +23,8 @@ class PyTracker(pym3t.Tracker):
         display_timings: bool = True,
     ) -> bool:
         """Run the tracking process for a given number of iterations.
-        Re-implementation of the pym3t.Tracker::RunTrackerProcess method.
+        Re-implementation of the pym3t.Tracker::RunTrackerProcess method, but
+        not an override.
 
         Args:
             execute_detection_and_start_tracking (bool, optional): Whether to execute
