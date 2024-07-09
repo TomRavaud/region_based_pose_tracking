@@ -8,3 +8,5 @@ build/
 
 /tmp/*
 !/tmp/.gitkeep
+
+/weights/*

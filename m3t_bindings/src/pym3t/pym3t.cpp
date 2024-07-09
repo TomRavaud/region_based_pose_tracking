@@ -2,6 +2,9 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
+// NOTE:
+#include <opencv2/core.hpp>
+
 // Other
 #include <sstream>
 
@@ -35,6 +38,8 @@
 
 // pym3t
 #include "pym3t/region_modality_base.h"
+// TODO: to remove
+// #include "pym3t/type_caster_opencv.h"
 
 
 namespace nb = nanobind;
@@ -120,6 +125,7 @@ NB_MODULE(_pym3t_mod, m){
              "name"_a, "load_directory"_a, "intrinsics"_a,
              "image_name_pre"_a="", "load_index"_a=0, "n_leading_zeros"_a=0,
              "image_name_post"_a="", "load_image_type"_a="png")
+        .def_prop_ro("image", &LoaderColorCamera::image)
         ;
     
     // Viewer -> not constructible, just to enable automatic downcasting
@@ -287,6 +293,37 @@ NB_MODULE(_pym3t_mod, m){
                     segment_probabilities_f,
                     segment_probabilities_b);
             })
+        .def("NormalizeSegmentProbabilities", [](
+            const RegionModalityBase &self,
+            std::vector<float> *segment_probabilities_f,
+            std::vector<float> *segment_probabilities_b) {
+                self.NormalizeSegmentProbabilities(
+                    segment_probabilities_f,
+                    segment_probabilities_b);
+                return std::make_tuple(
+                    segment_probabilities_f,
+                    segment_probabilities_b);
+            })
+        .def("ComputeBoundingBox", [](
+            const RegionModalityBase &self,
+            const std::vector<RegionModel::DataPoint> &data_points) {
+                Eigen::Matrix<float, 2, 2> bounding_box;
+                self.ComputeBoundingBox(data_points, bounding_box);
+                return bounding_box;
+            })
+        .def("ComputeLinePixelsCoordinates", [](
+            const RegionModalityBase &self,
+            MatrixXi &line_pixels_coordinates,
+            RegionModalityBase::DataLine &data_line) {
+                bool result = self.ComputeLinePixelsCoordinates(
+                    data_line.center_u, data_line.center_v, 
+                    data_line.normal_u, data_line.normal_v,
+                    line_pixels_coordinates,
+                    &data_line.normal_component_to_scale, &data_line.delta_r);
+                return std::make_tuple(
+                    result,
+                    line_pixels_coordinates);
+            })
         // Pass bound type (DataLine) to avoid the mutable reference issue
         // with type casters (data_line.distribution is a std::vector<>)
         .def("CalculateDistribution", [](
@@ -314,10 +351,11 @@ NB_MODULE(_pym3t_mod, m){
         .def("ClearDataLines", &RegionModalityBase::ClearDataLines)
 
         .def_prop_ro("body", &RegionModalityBase::body_ptr)
-        .def_prop_ro("model_occlusions", &RegionModalityBase::model_occlusions)
         .def_prop_ro("depth_renderer", &RegionModalityBase::depth_renderer_ptr)
         .def_prop_ro("silhouette_renderer", &RegionModalityBase::silhouette_renderer_ptr)
         .def_prop_ro("region_model", &RegionModalityBase::region_model_ptr)
+        .def_prop_ro("color_camera", &RegionModalityBase::color_camera_ptr)
+        .def_prop_ro("model_occlusions", &RegionModalityBase::model_occlusions)
         .def_prop_ro("first_iteration", &RegionModalityBase::first_iteration)
         .def_prop_ro("n_lines_max", &RegionModalityBase::n_lines_max)
         .def_prop_ro("use_adaptive_coverage", &RegionModalityBase::use_adaptive_coverage)
@@ -327,6 +365,8 @@ NB_MODULE(_pym3t_mod, m){
         .def_prop_ro("measure_occlusions", &RegionModalityBase::measure_occlusions)
         .def_prop_ro("min_n_unoccluded_lines", &RegionModalityBase::min_n_unoccluded_lines)
         .def_prop_ro("line_length_in_segments", &RegionModalityBase::line_length_in_segments)
+        .def_prop_ro("line_length", &RegionModalityBase::line_length)
+        .def_prop_ro("scale", &RegionModalityBase::scale)
         .def_prop_ro("body2camera_pose", &RegionModalityBase::body2camera_pose)
         .def_prop_ro("data_lines", &RegionModalityBase::data_lines)
         ;
@@ -347,5 +387,33 @@ NB_MODULE(_pym3t_mod, m){
     nb::class_<FocusedSilhouetteRenderer, FocusedDepthRenderer>(m, "FocusedSilhouetteRenderer")
         .def("IsBodyVisible", &FocusedSilhouetteRenderer::IsBodyVisible)
         .def("FetchSilhouetteImage", &FocusedSilhouetteRenderer::FetchSilhouetteImage)
-        ; 
+        ;
+
+    // Bind cv::Mat in order to be able to convert it to a ndarray
+    nb::class_<cv::Mat>(m, "cvMat")
+        .def("to_numpy", [](const cv::Mat &mat) {
+            // Check the type of mat and convert accordingly
+            if (mat.type() == CV_8UC3) {
+                size_t shape[3] = {mat.rows, mat.cols, mat.channels()};
+
+                //TODO: make a copy in image getter (LoaderColorCamera), nb::rv_policy::copy to work with capsule?
+                return nb::ndarray<nb::numpy, uint8_t, nb::shape<-1, -1, 3>>(
+                    mat.data, 3, shape, nb::capsule());
+                
+            } else {
+                throw std::invalid_argument("Unsupported Mat type");
+            }
+        })
+        // .def("to_pytorch", [](const cv::Mat &mat) {
+        //     // Check the type of mat and convert accordingly
+        //     if (mat.type() == CV_8UC3) {
+                
+        //         size_t shape[3] = {mat.rows, mat.cols, mat.channels()};
+        //         return nb::ndarray<nb::pytorch, uint8_t, nb::shape<-1, -1, 3>>(
+        //             mat.data, 3, shape, nb::capsule(), nullptr, nb::dtype<uint8_t>(), nb::device::cpu::value, 0);
+        //     } else {
+        //         throw std::invalid_argument("Unsupported Mat type");
+        //     }
+        // })
+        ;
 }

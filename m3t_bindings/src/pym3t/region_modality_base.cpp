@@ -1459,22 +1459,28 @@ bool RegionModalityBase::CalculateSegmentProbabilities(
 
     // Iterate over all pixels of line and calculate probabilities
     if (normal_u > 0) {
+      // Pointer to the first element of the vector
       float *segment_probability_f = segment_probabilities_f->data();
       float *segment_probability_b = segment_probabilities_b->data();
+      // Set the probability of the first segment to 1
       *segment_probability_f = 1.0f;
       *segment_probability_b = 1.0f;
       int segment_idx = 0;
       for (; u <= u_end; ++u, v_f += v_step, segment_idx++) {
+        // If we went through scale_ pixels (= 1 segment), go to the next segment
         if (segment_idx == scale_) {
+          // Set the probability of the next segment to 1
           *(++segment_probability_f) = 1.0f;
           *(++segment_probability_b) = 1.0f;
           segment_idx = 0;
         }
+        // Multiply the probabilities of all pixels in the segment
         MultiplyPixelColorProbability(image.at<cv::Vec3b>(int(v_f), u),
                                       segment_probability_f,
                                       segment_probability_b);
       }
     } else {
+      // Pointer to the last element of the vector (reverse order)
       float *segment_probability_f = &segment_probabilities_f->back();
       float *segment_probability_b = &segment_probabilities_b->back();
       *segment_probability_f = 1.0f;
@@ -1555,7 +1561,7 @@ bool RegionModalityBase::CalculateSegmentProbabilities(
                normal_v;
   }
 
-  // Normalize segment probabilities
+  // Normalize segment probabilities such that they sum up to one
   if (scale_ > 1) {
     auto segment_probability_f = begin(*segment_probabilities_f);
     auto segment_probability_b = begin(*segment_probabilities_b);
@@ -1575,6 +1581,126 @@ bool RegionModalityBase::CalculateSegmentProbabilities(
   return true;
 }
 
+
+bool RegionModalityBase::ComputeLinePixelsCoordinates(
+    float center_u, float center_v, float normal_u, float normal_v,
+    Eigen::MatrixXi &line_pixels_coordinates,
+    float *normal_component_to_scale, float *delta_r) const {
+  
+  // Select case if line is more horizontal or vertical
+  if (std::fabs(normal_v) < std::fabs(normal_u)) {
+    // Calculate step and starting position
+    float v_step = normal_v / normal_u;
+    // Notice: u = int(center_u - (line_length / 2 - 0.5) + 0.5)
+    int u = int(center_u - line_length_half_minus_1_);
+    int u_end = u + line_length_minus_1_;
+    float v_f = center_v + v_step * (float(u) - center_u) + 0.5f;
+    float v_f_end = v_f + v_step * float(line_length_minus_1_);
+
+    // Check if line is on image (margin of 1 for rounding errors of v_f_end)
+    if (u < 0 || u_end > image_width_minus_1_ || int(v_f) < 0 ||
+        int(v_f) > image_height_minus_1_ || int(v_f_end) < 1 ||
+        int(v_f_end) > image_height_minus_2_) {
+      return false;
+    }
+
+    // Iterate over all pixels of line and store coordinates
+    int pixel_idx = 0;
+    for (; u <= u_end; ++u, v_f += v_step, pixel_idx++)
+      // Store coordinates in matrix
+      line_pixels_coordinates.row(pixel_idx) << u, int(v_f);
+      // line_pixels_coordinates.col(pixel_idx) << u, int(v_f);
+      // line_pixels_coordinates.push_back(std::make_pair(u, int(v_f)));
+
+    // define dominant normal component and calculate delta_r
+    *normal_component_to_scale = std::fabs(normal_u) / fscale_;
+    *delta_r = (std::round(center_u - line_length_minus_1_half_) +
+                line_length_minus_1_half_ - center_u) /
+               normal_u;
+  } else {
+    // Calculate step and starting position
+    float u_step = normal_u / normal_v;
+    // Notice: v = int(center_v - (line_length / 2 - 0.5) + 0.5)
+    int v = int(center_v - line_length_half_minus_1_);
+    int v_end = v + line_length_minus_1_;
+    float u_f = center_u + u_step * (float(v) - center_v) + 0.5f;
+    float u_f_end = u_f + u_step * float(line_length_minus_1_);
+
+    // Check if line is on image (margin of 1 for rounding errors of u_f_end)
+    if (v < 0 || v_end > image_height_minus_1_ || int(u_f) < 0 ||
+        int(u_f) > image_width_minus_1_ || int(u_f_end) < 1 ||
+        int(u_f_end) > image_width_minus_2_) {
+      return false;
+    }
+
+    // Iterate over all pixels of line and calculate probabilities
+    int pixel_idx = 0;
+    for (; v <= v_end; ++v, u_f += u_step, pixel_idx++)
+      // Store coordinates in matrix
+      line_pixels_coordinates.row(pixel_idx) << int(u_f), v;
+      // line_pixels_coordinates.col(pixel_idx) << int(u_f), v;
+      // line_pixels_coordinates.push_back(std::make_pair(int(u_f), v));
+
+    // define normal component and calculate delta_r
+    *normal_component_to_scale = std::fabs(normal_v) / fscale_;
+    *delta_r = (std::round(center_v - line_length_minus_1_half_) +
+                line_length_minus_1_half_ - center_v) /
+               normal_v;
+  }
+  return true;
+}
+
+void RegionModalityBase::NormalizeSegmentProbabilities(
+    std::vector<float> *segment_probabilities_f,
+    std::vector<float> *segment_probabilities_b) const {
+  // Normalize segment probabilities such that they sum up to one
+  if (scale_ > 1) {
+    auto segment_probability_f = begin(*segment_probabilities_f);
+    auto segment_probability_b = begin(*segment_probabilities_b);
+    for (; segment_probability_f != end(*segment_probabilities_f);
+         ++segment_probability_f, ++segment_probability_b) {
+      if (*segment_probability_f || *segment_probability_b) {
+        float sum = *segment_probability_f;
+        sum += *segment_probability_b;
+        *segment_probability_f /= sum;
+        *segment_probability_b /= sum;
+      } else {
+        *segment_probability_f = 0.5f;
+        *segment_probability_b = 0.5f;
+      }
+    }
+  }
+}
+
+void RegionModalityBase::ComputeBoundingBox(
+    const std::vector<RegionModel::DataPoint> &data_points,
+    Eigen::Matrix<float, 2, 2> &bounding_box) const {
+
+  // Initialize bounding box
+  float u_min = std::numeric_limits<float>::max();
+  float v_min = std::numeric_limits<float>::max();
+  float u_max = std::numeric_limits<float>::lowest();
+  float v_max = std::numeric_limits<float>::lowest();
+  
+  // Iterate over all data points
+  for (const auto &data_point : data_points) {
+    Eigen::Vector3f center_f_camera{body2camera_pose_ * data_point.center_f_body};
+
+    // Calculate bounding box
+    float u = center_f_camera(0) * fu_ / center_f_camera(2) + ppu_;
+    float v = center_f_camera(1) * fv_ / center_f_camera(2) + ppv_;
+
+    if (u < u_min) u_min = u;
+    if (v < v_min) v_min = v;
+    if (u > u_max) u_max = u;
+    if (v > v_max) v_max = v;
+  }
+  bounding_box(0, 0) = u_min;
+  bounding_box(0, 1) = v_min;
+  bounding_box(1, 0) = u_max;
+  bounding_box(1, 1) = v_max;
+}
+
 void RegionModalityBase::MultiplyPixelColorProbability(const cv::Vec3b &pixel_color,
                                                    float *probability_f,
                                                    float *probability_b) const {
@@ -1584,13 +1710,13 @@ void RegionModalityBase::MultiplyPixelColorProbability(const cv::Vec3b &pixel_co
   color_histograms_ptr_->GetProbabilities(
       pixel_color, &pixel_color_probability_f, &pixel_color_probability_b);
 
-  // Normalize pixel color probability values
+  // Normalize pixel color probability values such that they sum up to one
   if (pixel_color_probability_f || pixel_color_probability_b) {
     float sum = pixel_color_probability_f;
     sum += pixel_color_probability_b;
     pixel_color_probability_f /= sum;
     pixel_color_probability_b /= sum;
-  } else {
+  } else {  // Set default values if both probabilities are zero
     pixel_color_probability_f = 0.5f;
     pixel_color_probability_b = 0.5f;
   }

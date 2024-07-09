@@ -223,10 +223,24 @@ class RegionModalityBase : public Modality {
                                     float *mean, float *variance) const;
   int first_iteration() const { return first_iteration_; }
   int line_length_in_segments() const { return line_length_in_segments_; }
+  int line_length() const { return line_length_; }
+  int scale() const { return scale_; }
   std::vector<DataLine> &data_lines() { return data_lines_; }
   void AddDataLine(const DataLine &data_line) { data_lines_.push_back(std::move(data_line)); }
   void ClearDataLines() { data_lines_.clear(); }
   Transform3fA body2camera_pose() const { return body2camera_pose_; }
+
+  // New methods
+  void NormalizeSegmentProbabilities(
+      std::vector<float> *segment_probabilities_f,
+      std::vector<float> *segment_probabilities_b) const;
+  bool ComputeLinePixelsCoordinates(
+      float center_u, float center_v, float normal_u, float normal_v,
+      Eigen::MatrixXi &line_pixels_coordinates,
+      float *normal_component_to_scale, float *delta_r) const;
+  void ComputeBoundingBox(
+      const std::vector<RegionModel::DataPoint> &data_points,
+      Eigen::Matrix<float, 2, 2> &bounding_box) const;
 
 
  private:
