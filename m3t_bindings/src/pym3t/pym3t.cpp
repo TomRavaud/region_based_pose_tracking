@@ -35,11 +35,10 @@
 #include <m3t/static_detector.h>
 #include <m3t/tracker.h>
 #include <m3t/loader_camera.h>
+#include <m3t/color_histograms.h>
 
 // pym3t
 #include "pym3t/region_modality_base.h"
-// TODO: to remove
-// #include "pym3t/type_caster_opencv.h"
 
 
 namespace nb = nanobind;
@@ -49,10 +48,16 @@ using namespace Eigen;
 
 
 // Define a trampoline for the RegionModalityBase class in order to be able to
-// override the CalculateCorrespondences method in Python
+// override the CalculateCorrespondences and StartModality methods in Python
 struct PyRegionModalityBase : RegionModalityBase {
-    NB_TRAMPOLINE(RegionModalityBase, 1);
+    NB_TRAMPOLINE(RegionModalityBase, 2);
 
+    bool StartModality(int iteration, int corr_iteration) override {
+        NB_OVERRIDE_NAME(
+            "start_modality",
+            StartModality,
+            iteration, corr_iteration);
+    }
     bool CalculateCorrespondences(int iteration, int corr_iteration) override {
         NB_OVERRIDE_NAME(
             "calculate_correspondences",
@@ -94,6 +99,9 @@ NB_MODULE(_pym3t_mod, m){
              "names_starting"_a=nullptr)
         .def_prop_ro("set_up", &Tracker::set_up)
         .def_prop_ro("name", &Tracker::name)
+        .def_prop_rw("n_update_iterations",
+                     &Tracker::n_update_iterations,
+                     &Tracker::set_n_update_iterations)
         ;
     
     // RendererGeometry
@@ -245,6 +253,14 @@ NB_MODULE(_pym3t_mod, m){
              "name"_a, "optimizer"_a, "link2world_pose"_a, "reset_joint_poses"_a)
         ;
     
+    nb::class_<ColorHistograms>(m, "ColorHistograms")
+        .def(nb::init<const std::string &, int, float, float>(),
+             "name"_a, "n_bins"_a=16, "learning_rate_f"_a=0.2f, "learning_rate_b"_a=0.2f)
+        .def("ClearMemory", &ColorHistograms::ClearMemory)
+        .def("InitializeHistograms", &ColorHistograms::InitializeHistograms)
+        ;
+
+
     // DataLine structure
     nb::class_<RegionModalityBase::DataLine>(m, "DataLine")
         .def(nb::init<>())
@@ -346,6 +362,8 @@ NB_MODULE(_pym3t_mod, m){
                     &data_line.mean,
                     &data_line.measured_variance);
             })
+        .def("AddLinePixelColorsToTempHistograms",
+             &RegionModalityBase::AddLinePixelColorsToTempHistograms)
         // New methods to allow data lines manipulation from Python
         .def("AddDataLine", &RegionModalityBase::AddDataLine)
         .def("ClearDataLines", &RegionModalityBase::ClearDataLines)
@@ -355,8 +373,11 @@ NB_MODULE(_pym3t_mod, m){
         .def_prop_ro("silhouette_renderer", &RegionModalityBase::silhouette_renderer_ptr)
         .def_prop_ro("region_model", &RegionModalityBase::region_model_ptr)
         .def_prop_ro("color_camera", &RegionModalityBase::color_camera_ptr)
+        .def_prop_ro("color_histograms", &RegionModalityBase::color_histograms_ptr_internal)
         .def_prop_ro("model_occlusions", &RegionModalityBase::model_occlusions)
-        .def_prop_ro("first_iteration", &RegionModalityBase::first_iteration)
+        .def_prop_rw("first_iteration",
+                     &RegionModalityBase::first_iteration,
+                     &RegionModalityBase::set_first_iteration)
         .def_prop_ro("n_lines_max", &RegionModalityBase::n_lines_max)
         .def_prop_ro("use_adaptive_coverage", &RegionModalityBase::use_adaptive_coverage)
         .def_prop_ro("reference_contour_length", &RegionModalityBase::reference_contour_length)
@@ -369,6 +390,8 @@ NB_MODULE(_pym3t_mod, m){
         .def_prop_ro("scale", &RegionModalityBase::scale)
         .def_prop_ro("body2camera_pose", &RegionModalityBase::body2camera_pose)
         .def_prop_ro("data_lines", &RegionModalityBase::data_lines)
+        .def_prop_ro("use_shared_color_histograms",
+                     &RegionModalityBase::use_shared_color_histograms)
         ;
     
     // Renderer -> not constructible, just to enable automatic downcasting

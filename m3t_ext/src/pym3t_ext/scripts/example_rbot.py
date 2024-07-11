@@ -33,6 +33,7 @@ def main():
         name="tracker",
         synchronize_cameras=False,
     )
+    tracker.n_update_iterations = 4
 
     # Set up renderer geometry
     renderer_geometry = pym3t.RendererGeometry(

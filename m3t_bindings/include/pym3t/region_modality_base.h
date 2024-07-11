@@ -128,7 +128,7 @@ class RegionModalityBase : public Modality {
   void set_visualization_max_depth(float visualization_max_depth);
 
   // Main methods
-  bool StartModality(int iteration, int corr_iteration) override;
+  virtual bool StartModality(int iteration, int corr_iteration) override;
   virtual bool CalculateCorrespondences(int iteration, int corr_iteration) override;
   bool VisualizeCorrespondences(int save_idx) override;
   bool CalculateGradientAndHessian(int iteration, int corr_iteration,
@@ -221,7 +221,9 @@ class RegionModalityBase : public Modality {
                              std::vector<float> *distribution) const;
   void CalculateDistributionMoments(const std::vector<float> &distribution,
                                     float *mean, float *variance) const;
+  void AddLinePixelColorsToTempHistograms(bool handle_occlusions);
   int first_iteration() const { return first_iteration_; }
+  void set_first_iteration(int first_iteration) { first_iteration_ = first_iteration; }
   int line_length_in_segments() const { return line_length_in_segments_; }
   int line_length() const { return line_length_; }
   int scale() const { return scale_; }
@@ -241,6 +243,9 @@ class RegionModalityBase : public Modality {
   void ComputeBoundingBox(
       const std::vector<RegionModel::DataPoint> &data_points,
       Eigen::Matrix<float, 2, 2> &bounding_box) const;
+  std::shared_ptr<ColorHistograms> color_histograms_ptr_internal() const {
+    return color_histograms_ptr_;
+  }
 
 
  private:
@@ -259,7 +264,6 @@ class RegionModalityBase : public Modality {
   void PrecalculateRendererVariables();
 
   // Helper methods for histogram calculation
-  void AddLinePixelColorsToTempHistograms(bool handle_occlusions);
   void DynamicRegionDistance(float center_u, float center_v, float normal_u,
                              float normal_v, float *dynamic_foreground_distance,
                              float *dynamic_background_distance) const;

@@ -46,6 +46,35 @@ class DeepRegionModality(pym3t.RegionModalityBase):
     # Set the device to use
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
+    def start_modality(self, iteration: int, corr_iteration: int) -> bool:
+        """Start the modality. It is an override of the
+        pym3t.RegionModalityBase::StartModality method.
+
+        Args:
+            iteration (int): Update iteration number.
+            corr_iteration (int): Correspondence iteration number.
+
+        Returns:
+            bool: Whether the modality was started successfully.
+        """
+        if not self.IsSetup():
+            return False
+        
+        self.first_iteration = iteration
+        
+        # Compute body to camera(s) pose(s)
+        self.PrecalculatePoseVariables()
+        
+        # Initialize histograms
+        handle_occlusions = self.n_unoccluded_iterations == 0
+        if not self.use_shared_color_histograms:
+            self.color_histograms.ClearMemory()
+        self.AddLinePixelColorsToTempHistograms(handle_occlusions)
+        if not self.use_shared_color_histograms:
+            self.color_histograms.InitializeHistograms()
+        
+        return True
+    
 
     def load_prediction_module(self):
         
@@ -125,8 +154,8 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         # PyTorch conversion
         image_pytorch = torch.from_numpy(image_np)
         
-        # TODO: to change
-        # bbox = [155, 100, 200, 150] 
+        # TODO: to remove
+        # bbox = np.array([155, 100, 200, 150]).reshape(2, 2)
         
         # Set the input data for the prediction module
         input = BatchInferenceData(
@@ -154,21 +183,22 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         self._predicted_probabilistic_mask =\
             predicted_probabilistic_masks[0].cpu().numpy()
         
-        # # Display the image
-        # _, ax = plt.subplots()
-        # ax.imshow(input.rgbs.squeeze().permute(1, 2, 0).cpu().numpy())
-        # rect = patches.Rectangle(
-        #     (bbox[0], bbox[1]),
-        #     bbox[2] - bbox[0],
-        #     bbox[3] - bbox[1],
-        #     linewidth=1,
-        #     edgecolor="r",
-        #     facecolor="none",
-        # )
-        # ax.add_patch(rect)
-        # ax.axis("off")
-        # plt.title("Input image with bounding box")
-        # plt.tight_layout()
+        # Display the image
+        _, ax = plt.subplots()
+        ax.imshow(input.rgbs.squeeze().permute(1, 2, 0).cpu().numpy())
+        rect = patches.Rectangle(
+            (bbox[0, 0], bbox[0, 1]),
+            bbox[1, 0] - bbox[0, 0],
+            bbox[1, 1] - bbox[0, 1],
+            linewidth=1,
+            edgecolor="r",
+            facecolor="none",
+        )
+        ax.add_patch(rect)
+        ax.axis("off")
+        plt.tight_layout()
+        # Save and remove padding with original size
+        # plt.savefig("image.png", bbox_inches="tight", pad_inches=0)
          
         # Display the mask
         fig, ax = plt.subplots()
@@ -201,7 +231,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         """
         # Load the prediction module if it is not loaded yet
         if self._prediction_module is None:
-            self.load_prediction_module() 
+            self.load_prediction_module()
         
         # Check if the modality is set up (i.e., required objects are set up and
         # correctly configured, and pre-calculated variables are available
@@ -312,8 +342,8 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 # of the resizing)
                 
                 #########################################################
-                # # Compute the probabilistic segmentations (foreground and background) of
-                # # each segment of the line using the color histograms (Bayes' rule)
+                # Compute the probabilistic segmentations (foreground and background) of
+                # each segment of the line using the color histograms (Bayes' rule)
                 # result, segment_probabilities_f, segment_probabilities_b =\
                 #     self.CalculateSegmentProbabilities(
                 #         segment_probabilities_f,
@@ -374,6 +404,18 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                         segment_probabilities_f,
                         segment_probabilities_b,
                     )
+                
+                # NOTE: Unsatisfaying workaround to avoid the issue
+                threshold = 0.4
+                new_seg_f = [min(x + threshold, 1) for x in segment_probabilities_f]
+                segment_probabilities_f = new_seg_f
+                
+                segment_probabilities_b = [1 - x for x in segment_probabilities_f]
+                
+                # print("New\n")
+                # print(segment_probabilities_f)
+                # # print(segment_probabilities_f_mlp)
+                # print("\n")
                 #########################################################
                 
                 # NOTE: exit the for loop, compute the probabilities, and new for

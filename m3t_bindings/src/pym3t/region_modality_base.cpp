@@ -371,19 +371,24 @@ void RegionModalityBase::set_visualization_max_depth(
 }
 
 bool RegionModalityBase::StartModality(int iteration, int corr_iteration) {
-  if (!IsSetup()) return false;
-
-  first_iteration_ = iteration;
-  PrecalculatePoseVariables();
-
-  // Initialize histograms
-  bool handle_occlusions = n_unoccluded_iterations_ == 0;
-  if (!use_shared_color_histograms_) color_histograms_ptr_->ClearMemory();
-  AddLinePixelColorsToTempHistograms(handle_occlusions);
-  if (!use_shared_color_histograms_)
-    color_histograms_ptr_->InitializeHistograms();
-  return true;
+  std::cerr << "RegionModalityBase::StartModality not implemented" << std::endl;
+  return false;
 }
+
+// bool RegionModalityBase::StartModality(int iteration, int corr_iteration) {
+//   if (!IsSetup()) return false;
+
+//   first_iteration_ = iteration;
+//   PrecalculatePoseVariables();
+
+//   // Initialize histograms
+//   bool handle_occlusions = n_unoccluded_iterations_ == 0;
+//   if (!use_shared_color_histograms_) color_histograms_ptr_->ClearMemory();
+//   AddLinePixelColorsToTempHistograms(handle_occlusions);
+//   if (!use_shared_color_histograms_)
+//     color_histograms_ptr_->InitializeHistograms();
+//   return true;
+// }
 
 bool RegionModalityBase::CalculateCorrespondences(int iteration, int corr_iteration) {
   std::cerr << "RegionModalityBase::CalculateCorrespondences not implemented" << std::endl;
@@ -1605,13 +1610,20 @@ bool RegionModalityBase::ComputeLinePixelsCoordinates(
     }
 
     // Iterate over all pixels of line and store coordinates
-    int pixel_idx = 0;
-    for (; u <= u_end; ++u, v_f += v_step, pixel_idx++)
-      // Store coordinates in matrix
-      line_pixels_coordinates.row(pixel_idx) << u, int(v_f);
-      // line_pixels_coordinates.col(pixel_idx) << u, int(v_f);
-      // line_pixels_coordinates.push_back(std::make_pair(u, int(v_f)));
+    if (normal_u > 0) {
+      int pixel_idx = 0;
+      for (; u <= u_end; ++u, v_f += v_step, pixel_idx++)
+        // Store coordinates in matrix
+        line_pixels_coordinates.row(pixel_idx) << u, int(v_f);
+        // line_pixels_coordinates.col(pixel_idx) << u, int(v_f);
+        // line_pixels_coordinates.push_back(std::make_pair(u, int(v_f)));
 
+    } else {  // Store in reverse order
+      int pixel_idx = line_length_ - 1;
+      for (; u <= u_end; ++u, v_f += v_step, pixel_idx--)
+        // Store coordinates in matrix
+        line_pixels_coordinates.row(pixel_idx) << u, int(v_f);
+    }
     // define dominant normal component and calculate delta_r
     *normal_component_to_scale = std::fabs(normal_u) / fscale_;
     *delta_r = (std::round(center_u - line_length_minus_1_half_) +
@@ -1634,12 +1646,19 @@ bool RegionModalityBase::ComputeLinePixelsCoordinates(
     }
 
     // Iterate over all pixels of line and calculate probabilities
-    int pixel_idx = 0;
-    for (; v <= v_end; ++v, u_f += u_step, pixel_idx++)
-      // Store coordinates in matrix
-      line_pixels_coordinates.row(pixel_idx) << int(u_f), v;
-      // line_pixels_coordinates.col(pixel_idx) << int(u_f), v;
-      // line_pixels_coordinates.push_back(std::make_pair(int(u_f), v));
+    if (normal_v > 0) {
+      int pixel_idx = 0;
+      for (; v <= v_end; ++v, u_f += u_step, pixel_idx++)
+        // Store coordinates in matrix
+        line_pixels_coordinates.row(pixel_idx) << int(u_f), v;
+        // line_pixels_coordinates.col(pixel_idx) << int(u_f), v;
+        // line_pixels_coordinates.push_back(std::make_pair(int(u_f), v));
+    } else {  // Store in reverse order
+      int pixel_idx = line_length_ - 1;
+      for (; v <= v_end; ++v, u_f += u_step, pixel_idx--)
+        // Store coordinates in matrix
+        line_pixels_coordinates.row(pixel_idx) << int(u_f), v;
+    }
 
     // define normal component and calculate delta_r
     *normal_component_to_scale = std::fabs(normal_v) / fscale_;
