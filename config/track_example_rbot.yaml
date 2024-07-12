@@ -1,0 +1,23 @@
+dataset_name: rbot
+dataset_dir: data/RBOT
+
+model: ape
+scene: a_regular
+
+geometry_unit_in_meter: 0.001
+
+# Camera intrinsics (see RBOT dataset)
+intrinsics:
+  fu: 650.048
+  fv: 647.183
+  ppu: 324.328
+  ppv: 257.323
+  width: 640
+  height: 512
+
+# First GT pose (see RBOT dataset)
+body2world_pose:
+  - [0.997056, -0.04307, 0.0634383, 0.019051]
+  - [0.043157, 0.999068, 0.0, 0.00408901]
+  - [-0.0633792, 0.0027378, 0.997986, 0.549]
+  - [0.0, 0.0, 0.0, 1.0]

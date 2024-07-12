@@ -1,0 +1,24 @@
+dataset_name: rbot
+dataset_dir: data/RBOT
+
+image_size:
+  height: 512
+  width: 640
+
+geometry_unit_in_meter: 0.001
+
+# Metrics to evaluate
+metrics:
+  - cm_degree_score
+
+# Choose the scenes and models to evaluate
+scenes_models_dict:
+  a_regular:
+    - ape
+    - cat
+  b_dynamiclight:
+    - ape
+    - phone
+
+# To evaluate all scenes and models, use the following
+# scenes_models_dict: all

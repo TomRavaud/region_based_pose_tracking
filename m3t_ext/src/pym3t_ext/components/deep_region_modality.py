@@ -167,13 +167,14 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         
         # Set the model to evaluation mode
         self._prediction_module.eval()
-        
+
     def compute_probabilistic_segmentation(
         self,
         bbox: np.ndarray = None,
         pixel_segmentation_only: bool = False,
         mlp_parameters_prediction_only: bool = False,
-        visualize: bool = True,
+        visualize: bool = False,
+        # resize: bool = True,
     ) -> None:
         """Compute the probabilistic segmentation of the image, or the MLP parameters
         only.
@@ -213,7 +214,9 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 ],
         )
         
-        # Resize the input data
+        # if resize:
+        #     # Resize the input data
+        #     input = self._resize_transform(input)
         input = self._resize_transform(input)
         
         # Send the input data to the device
@@ -286,7 +289,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         
         if visualize:
             plt.show()
-    
+
     def calculate_correspondences(self, iteration: int, corr_iteration: int) -> bool:
         """Calculate the correspondence lines data (center, normal, segment
         probabilities, etc.) for a given iteration. It is an override of the
@@ -358,6 +361,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 bbox=None,
                 pixel_segmentation_only=True,
                 mlp_parameters_prediction_only=False,
+                # resize=False,
             )
 
         # Differentiate cases with and without occlusion handling:
@@ -396,7 +400,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 # NOTE: we can discard lines that cross the cropped area here (because
                 # of the resizing)
                 
-                #########################################################
+                # Original method
                 # Compute the probabilistic segmentations (foreground and background) of
                 # each segment of the line using the color histograms (Bayes' rule)
                 # result, segment_probabilities_f, segment_probabilities_b =\
@@ -456,7 +460,6 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                         segment_probabilities_b,
                     )
                 
-                
                 # NOTE: exit the for loop, compute the probabilities, and new for
                 # loop over the lines to compute the distribution and moments
                 
@@ -480,8 +483,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 break
         
         return True
-    
-    
+
     def calculate_results(self, iteration: int) -> bool:
         """Computations to be done at the end of the tracking process for
         the current image (e.g., update of the color histograms, etc.).
@@ -533,4 +535,3 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         )
 
         return True
-        
