@@ -34,8 +34,6 @@ class DeepRegionModality(pym3t.RegionModalityBase):
     _predicted_probabilistic_mask = None
     
     # Model trained on 320x240 images
-    # width_target = 320
-    # height_target = 240
     _resize_transform = CropResizeToAspectTransform(
         resize=(240, 320)
     )
@@ -45,6 +43,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
     
     # Set the device to use
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
     
     def start_modality(self, iteration: int, corr_iteration: int) -> bool:
         """Start the modality. It is an override of the
@@ -65,7 +64,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         # Compute body to camera(s) pose(s)
         self.PrecalculatePoseVariables()
         
-        # Initialize histograms
+        # Initialize histograms (not used)
         handle_occlusions = self.n_unoccluded_iterations == 0
         if not self.use_shared_color_histograms:
             self.color_histograms.ClearMemory()
@@ -73,14 +72,41 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         if not self.use_shared_color_histograms:
             self.color_histograms.InitializeHistograms()
         
-        return True
-    
-
-    def load_prediction_module(self):
+        # Load the prediction module
+        self.load_prediction_module()
         
+        #-------------------------------------------------#
+        # Initialize the probabilistic segmentation model #
+        #-------------------------------------------------#
+        # Search closest template view
+        _, view = self.region_model.GetClosestView(self.body2camera_pose)
+        
+        # Find the bounding box of the contour
+        bbox = self.ComputeBoundingBox(view.data_points)
+            
+        # Transform the bounding box coordinates to the probabilistic
+        # segmentation image space
+        bbox = self._resize_transform.point_transform(
+            points=bbox,
+            orig_size=self._original_image_size,
+        )
+        
+        # Predict the probabilistic segmentation model
+        self.compute_probabilistic_segmentation(
+            bbox,
+            pixel_segmentation_only=False,
+            mlp_parameters_prediction_only=True,
+        )
+        
+        return True
+
+    def load_prediction_module(self) -> None:
+        """
+        Load the prediction module used for probabilistic segmentation.
+        """
         # Load pre-trained weights
         train_module_state_dict = torch.load(
-            "weights/probabilistic_segmentation.ckpt"
+            "weights/probabilistic_segmentation_2.ckpt"
         ).get("state_dict")
         
         SimpleResNet34 = partialclass(
@@ -93,7 +119,8 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         probabilistic_segmentation_model = ProbabilisticSegmentationMLP(
             net_cls=SimpleResNet34,
             patch_size=5,
-            mlp_hidden_dims=[128, 64, 32],
+            mlp_hidden_dims=[64, 32, 16],
+            # mlp_hidden_dims=[128, 64, 32],
             apply_color_transformations=False,
             output_logits=False,
         )
@@ -104,11 +131,12 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         )
         
         def match_state_dict(state_dict: dict, model: torch.nn.Module) -> dict:
-            """Extract the state_dict of the model from an other state_dict by matching their
-            keys.
+            """Extract the state_dict of the model from an other state_dict by matching
+            their keys.
 
             Args:
-                state_dict (dict): The state_dict from which to extract the model's state_dict.
+                state_dict (dict): The state_dict from which to extract the model's
+                    state_dict.
                 model (torch.nn.Module): The model for which to extract the state_dict.
 
             Returns:
@@ -140,8 +168,29 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         # Set the model to evaluation mode
         self._prediction_module.eval()
         
-    def compute_probabilistic_segmentation(self, bbox: np.ndarray):
-        
+    def compute_probabilistic_segmentation(
+        self,
+        bbox: np.ndarray = None,
+        pixel_segmentation_only: bool = False,
+        mlp_parameters_prediction_only: bool = False,
+        visualize: bool = True,
+    ) -> None:
+        """Compute the probabilistic segmentation of the image, or the MLP parameters
+        only.
+
+        Args:
+            bbox (np.ndarray): The bounding box of the contour (only needed to predict
+                the MLP parameters). Defaults to None.
+            pixel_segmentation_only (bool, optional): Whether to recompute the MLP
+                parameters or to use the previous ones. Defaults to False.
+            mlp_parameters_prediction_only (bool, optional): Whether to predict the
+                MLP parameters only, without outputting the pixel segmentation.
+                Defaults to False.
+
+        Raises:
+            ValueError: If pixel_segmentation_only and mlp_parameters_prediction_only
+                are True at the same time.
+        """
         # Get RGB image
         cvimage = self.color_camera.image
         
@@ -153,9 +202,6 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         
         # PyTorch conversion
         image_pytorch = torch.from_numpy(image_np)
-        
-        # TODO: to remove
-        # bbox = np.array([155, 100, 200, 150]).reshape(2, 2)
         
         # Set the input data for the prediction module
         input = BatchInferenceData(
@@ -174,49 +220,73 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         input.rgbs = input.rgbs.to(self._device)
         
         # Perform the prediction
-        predicted_probabilistic_masks = self._prediction_module(
-            input,
-            pixel_segmentation_only=False,
-        )
+        if pixel_segmentation_only and mlp_parameters_prediction_only:
+            raise ValueError(
+                "pixel_segmentation_only and mlp_parameters_prediction_only "
+                "cannot be True at the same time."
+            )
         
-        # Convert the first predicted probabilistic mask to numpy
-        self._predicted_probabilistic_mask =\
-            predicted_probabilistic_masks[0].cpu().numpy()
+        elif pixel_segmentation_only:
+            predicted_probabilistic_masks = self._prediction_module(
+                input,
+                pixel_segmentation_only=True,
+                mlp_parameters_prediction_only=False,
+            )
+            # Convert the first predicted probabilistic mask to numpy
+            self._predicted_probabilistic_mask =\
+                predicted_probabilistic_masks[0].cpu().numpy()
+            
+            if visualize:
+                # Display the mask
+                fig, ax = plt.subplots()
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+
+                # Get the image to set the color scale
+                img = ax.imshow(self._predicted_probabilistic_mask, cmap="magma")
+                ax.axis("off")
+
+                # Colorbar
+                fig.colorbar(img, cmap="magma", cax=cax)
+
+                plt.tight_layout()
         
-        # Display the image
-        _, ax = plt.subplots()
-        ax.imshow(input.rgbs.squeeze().permute(1, 2, 0).cpu().numpy())
-        rect = patches.Rectangle(
-            (bbox[0, 0], bbox[0, 1]),
-            bbox[1, 0] - bbox[0, 0],
-            bbox[1, 1] - bbox[0, 1],
-            linewidth=1,
-            edgecolor="r",
-            facecolor="none",
-        )
-        ax.add_patch(rect)
-        ax.axis("off")
-        plt.tight_layout()
-        # Save and remove padding with original size
-        # plt.savefig("image.png", bbox_inches="tight", pad_inches=0)
-         
-        # Display the mask
-        fig, ax = plt.subplots()
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-
-        # Get the image to set the color scale
-        img = ax.imshow(self._predicted_probabilistic_mask, cmap="magma")
-        ax.axis("off")
-
-        # Colorbar
-        fig.colorbar(img, cmap="magma", cax=cax)
-
-        plt.tight_layout()
+        elif mlp_parameters_prediction_only:
+            self._prediction_module(
+                input,
+                pixel_segmentation_only=False,
+                mlp_parameters_prediction_only=True,
+            )
+            
+            if visualize:
+                # Display the image
+                _, ax = plt.subplots()
+                ax.imshow(input.rgbs.squeeze().permute(1, 2, 0).cpu().numpy())
+                rect = patches.Rectangle(
+                    (bbox[0, 0], bbox[0, 1]),
+                    bbox[1, 0] - bbox[0, 0],
+                    bbox[1, 1] - bbox[0, 1],
+                    linewidth=1,
+                    edgecolor="r",
+                    facecolor="none",
+                )
+                ax.add_patch(rect)
+                ax.axis("off")
+                plt.tight_layout()
         
-        plt.show()
+        else:
+            predicted_probabilistic_masks = self._prediction_module(
+                input,
+                pixel_segmentation_only=False,
+                mlp_parameters_prediction_only=False,
+            )
+            # Convert the first predicted probabilistic mask to numpy
+            self._predicted_probabilistic_mask =\
+                predicted_probabilistic_masks[0].cpu().numpy()
+        
+        if visualize:
+            plt.show()
     
-
     def calculate_correspondences(self, iteration: int, corr_iteration: int) -> bool:
         """Calculate the correspondence lines data (center, normal, segment
         probabilities, etc.) for a given iteration. It is an override of the
@@ -229,10 +299,6 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         Returns:
             bool: Whether the calculation was successful.
         """
-        # Load the prediction module if it is not loaded yet
-        if self._prediction_module is None:
-            self.load_prediction_module()
-        
         # Check if the modality is set up (i.e., required objects are set up and
         # correctly configured, and pre-calculated variables are available
         if not self.IsSetup():
@@ -283,27 +349,16 @@ class DeepRegionModality(pym3t.RegionModalityBase):
             n_lines = len(data_model_points)
         
         
-        #########################################################
         # Compute the probabilistic segmentation only once per image
         if corr_iteration == 0:
-            # Find the bounding box of the contour
-            bbox = self.ComputeBoundingBox(view.data_points)
             
-            # Transform the bounding box coordinates to the probabilistic
-            # segmentation image space
-            bbox = self._resize_transform.point_transform(
-                points=bbox,
-                orig_size=self._original_image_size,
+            # Predict the probabilistic segmentation mask using the
+            # already computed MLP parameters
+            self.compute_probabilistic_segmentation(
+                bbox=None,
+                pixel_segmentation_only=True,
+                mlp_parameters_prediction_only=False,
             )
-            
-            # Predict the probabilistic segmentation
-            self.compute_probabilistic_segmentation(bbox)
-        #########################################################
-
-        # NOTE: will store P(mf|y) and P(mb|y)
-        # Initialize segment probabilities
-        # segment_probabilities_f = [0] * self.line_length_in_segments
-        # segment_probabilities_b = [0] * self.line_length_in_segments
 
         # Differentiate cases with and without occlusion handling:
         # A. If occlusion handling is enabled:
@@ -375,10 +430,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                     orig_size=self._original_image_size,
                 )
                 
-                # print(line_pixels_coordinates.shape)
-                # print(self._predicted_probabilistic_mask.shape)
-                
-                # Compute the probabilistic segmentations (foreground and background) of
+                # Compute the probabilistic segmentations (P(mf|y) and P(mb|y)) of
                 # each pixel of the line using the probabilistic segmentation mask
                 line_pixels_probabilities_f = self._predicted_probabilistic_mask[
                     line_pixels_coordinates[:, 1],
@@ -386,9 +438,8 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 ]
                 line_pixels_probabilities_b = 1 - line_pixels_probabilities_f
                 
-                # Merge the probabilities of the pixels to get the segment probabilities
-                # Nb of pixels per segment : self.scale and I want to multiply the
-                # probabilities of the pixels of the same segment
+                # Merge the probabilities of the pixels belonging to the same segment to
+                # get the segment probabilities
                 segment_probabilities_f = np.prod(
                     line_pixels_probabilities_f.reshape(-1, self.scale),
                     axis=1,
@@ -405,18 +456,6 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                         segment_probabilities_b,
                     )
                 
-                # NOTE: Unsatisfaying workaround to avoid the issue
-                threshold = 0.4
-                new_seg_f = [min(x + threshold, 1) for x in segment_probabilities_f]
-                segment_probabilities_f = new_seg_f
-                
-                segment_probabilities_b = [1 - x for x in segment_probabilities_f]
-                
-                # print("New\n")
-                # print(segment_probabilities_f)
-                # # print(segment_probabilities_f_mlp)
-                # print("\n")
-                #########################################################
                 
                 # NOTE: exit the for loop, compute the probabilities, and new for
                 # loop over the lines to compute the distribution and moments
@@ -443,5 +482,55 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         return True
     
     
-    def calculate_segment_probabilities_mlp(self):
-        pass
+    def calculate_results(self, iteration: int) -> bool:
+        """Computations to be done at the end of the tracking process for
+        the current image (e.g., update of the color histograms, etc.).
+        It is an override of the pym3t.RegionModalityBase::CalculateResults method.
+
+        Args:
+            iteration (int): Update iteration number.
+
+        Returns:
+            bool: Whether the calculation was successful.
+        """
+        if not self.IsSetup():
+            return False
+        
+        if not self.use_shared_color_histograms:
+            self.color_histograms.ClearMemory()
+        
+        # Compute body to camera(s) pose(s)
+        self.PrecalculatePoseVariables()
+        
+        # Update the color histograms (not used)
+        handle_occlusions = (iteration - self.first_iteration)\
+            >= self.n_unoccluded_iterations
+        self.AddLinePixelColorsToTempHistograms(handle_occlusions)
+        if not self.use_shared_color_histograms:
+            self.color_histograms.UpdateHistograms()
+        
+        #---------------------------------------------#
+        # Update the probabilistic segmentation model #
+        #---------------------------------------------#
+        # Search closest template view
+        _, view = self.region_model.GetClosestView(self.body2camera_pose)
+        
+        # Find the bounding box of the contour
+        bbox = self.ComputeBoundingBox(view.data_points)
+            
+        # Transform the bounding box coordinates to the probabilistic
+        # segmentation image space
+        bbox = self._resize_transform.point_transform(
+            points=bbox,
+            orig_size=self._original_image_size,
+        )
+        
+        # Predict the probabilistic segmentation model
+        self.compute_probabilistic_segmentation(
+            bbox,
+            pixel_segmentation_only=False,
+            mlp_parameters_prediction_only=True,
+        )
+
+        return True
+        

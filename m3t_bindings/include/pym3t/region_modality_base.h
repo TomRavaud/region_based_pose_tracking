@@ -134,7 +134,7 @@ class RegionModalityBase : public Modality {
   bool CalculateGradientAndHessian(int iteration, int corr_iteration,
                                    int opt_iteration) override;
   bool VisualizeOptimization(int save_idx) override;
-  bool CalculateResults(int iteration) override;
+  virtual bool CalculateResults(int iteration) override;
   bool VisualizeResults(int save_idx) override;
 
   // Getters data

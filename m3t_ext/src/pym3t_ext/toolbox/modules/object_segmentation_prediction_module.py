@@ -76,6 +76,7 @@ class ObjectSegmentationPredictionModel(nn.Module):
         self,
         x: BatchInferenceData,
         pixel_segmentation_only: bool = False,
+        mlp_parameters_prediction_only: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass of the model.
 
@@ -83,6 +84,8 @@ class ObjectSegmentationPredictionModel(nn.Module):
             x (BatchInferenceData): Input data for the model.
             pixel_segmentation_only (bool, optional): Whether to use the previous
                 segmentation model to predict the pixel segmentation. Defaults to False.
+            mlp_parameters_prediction_only (bool, optional): Whether to only predict
+                the MLP parameters. Defaults to False.
 
         Returns:
             torch.Tensor: Predicted segmentation masks.
@@ -90,7 +93,13 @@ class ObjectSegmentationPredictionModel(nn.Module):
         # Get RGB images
         rgb_images = x.rgbs
         
-        if pixel_segmentation_only:
+        if pixel_segmentation_only and mlp_parameters_prediction_only:
+            raise ValueError(
+                "Only one of the flags 'pixel_segmentation_only' and"
+                "'mlp_parameters_prediction_only' can be True."
+            )
+        
+        elif pixel_segmentation_only:
             
             self._binary_masks = None
             
@@ -99,6 +108,25 @@ class ObjectSegmentationPredictionModel(nn.Module):
                     rgb_images,
                 )
             return probabilistic_masks
+
+        elif mlp_parameters_prediction_only:
+            
+            # Predict masks, scores and logits using the MobileSAM model
+            mobile_sam_outputs = self._mobile_sam(x.rgbs, x.contour_points_list)
+
+            # Stack the masks from the MobileSAM outputs
+            self._binary_masks = torch.stack([
+                output["masks"][:, torch.argmax(output["iou_predictions"])]
+                for output in mobile_sam_outputs
+            ])
+            
+            # Predict the MLP parameters
+            self._probabilistic_segmentation_model._forward_mlp_parameters_prediction(
+                rgb_images,
+                self._binary_masks,
+            )
+            
+            return
         
         else:
             # Predict masks, scores and logits using the MobileSAM model
@@ -159,6 +187,7 @@ class ObjectSegmentationPredictionModule(nn.Module):
         self,
         x: BatchInferenceData,
         pixel_segmentation_only: bool = False,
+        mlp_parameters_prediction_only: bool = False,
     ) -> torch.Tensor:
         """Forward pass of the model.
 
@@ -166,11 +195,17 @@ class ObjectSegmentationPredictionModule(nn.Module):
             x (BatchInferenceData): Input data for the model.
             pixel_segmentation_only (bool, optional): Whether to use the previous
                 segmentation model to predict the pixel segmentation. Defaults to False.
+            mlp_parameters_prediction_only (bool, optional): Whether to only predict
+                the MLP parameters. Defaults to False.
 
         Returns:
             torch.Tensor: Predicted segmentation masks.
         """
-        return self._model(x, pixel_segmentation_only)
+        return self._model(
+            x,
+            pixel_segmentation_only,
+            mlp_parameters_prediction_only,
+        )
 
 
 if __name__ == "__main__":

@@ -245,6 +245,35 @@ class ProbabilisticSegmentationMLP(ProbabilisticSegmentationBase):
         )
         
         return probabilistic_masks
+    
+    def _forward_mlp_parameters_prediction(
+        self,
+        rgb_images: torch.Tensor,
+        binary_masks: torch.Tensor,
+    ) -> None:
+        """Forward pass through the network to predict the weights and biases of
+        the MLP.
+
+        Args:
+            rgb_images (torch.Tensor): Batch of RGB images (B, 3, H, W). Values should
+                be in the range [0, 255] and of type torch.uint8.
+            binary_masks (torch.Tensor): Batch of binary masks (B, H, W). Values should
+                be either 0 or 1 and of type torch.float32.
+        """
+        # Convert [0, 255] -> [0.0, 1.0]
+        rgb_images = rgb_images.to(dtype=torch.float32)
+        rgb_images /= 255.0
+        
+        # Normalize RGB images
+        rgb_images_normalized = self._normalize_transform(rgb_images)
+        
+        # Concatenate masks and RGB images
+        input_implicit_segmentation =\
+            torch.cat([rgb_images_normalized, binary_masks], dim=1)
+
+        # Predict as many weights and biases sets as the number of images in the batch
+        self._pixel_segmentation_parameters =\
+            self._net(input_implicit_segmentation)
 
     def _forward(
         self,

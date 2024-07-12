@@ -371,7 +371,7 @@ void RegionModalityBase::set_visualization_max_depth(
 }
 
 bool RegionModalityBase::StartModality(int iteration, int corr_iteration) {
-  std::cerr << "RegionModalityBase::StartModality not implemented" << std::endl;
+  std::cerr << "RegionModalityBase::StartModality not implemented\n";
   return false;
 }
 
@@ -391,7 +391,7 @@ bool RegionModalityBase::StartModality(int iteration, int corr_iteration) {
 // }
 
 bool RegionModalityBase::CalculateCorrespondences(int iteration, int corr_iteration) {
-  std::cerr << "RegionModalityBase::CalculateCorrespondences not implemented" << std::endl;
+  std::cerr << "RegionModalityBase::CalculateCorrespondences not implemented\n";
   return false;
 }
 
@@ -578,17 +578,22 @@ bool RegionModalityBase::VisualizeOptimization(int save_idx) {
 }
 
 bool RegionModalityBase::CalculateResults(int iteration) {
-  if (!IsSetup()) return false;
-
-  // Calculate histograms
-  if (!use_shared_color_histograms_) color_histograms_ptr_->ClearMemory();
-  PrecalculatePoseVariables();
-  bool handle_occlusions =
-      (iteration - first_iteration_) >= n_unoccluded_iterations_;
-  AddLinePixelColorsToTempHistograms(handle_occlusions);
-  if (!use_shared_color_histograms_) color_histograms_ptr_->UpdateHistograms();
-  return true;
+  std::cerr << "RegionModalityBase::CalculateResults not implemented\n";
+  return false;
 }
+
+// bool RegionModalityBase::CalculateResults(int iteration) {
+//   if (!IsSetup()) return false;
+
+//   // Calculate histograms
+//   if (!use_shared_color_histograms_) color_histograms_ptr_->ClearMemory();
+//   PrecalculatePoseVariables();
+//   bool handle_occlusions =
+//       (iteration - first_iteration_) >= n_unoccluded_iterations_;
+//   AddLinePixelColorsToTempHistograms(handle_occlusions);
+//   if (!use_shared_color_histograms_) color_histograms_ptr_->UpdateHistograms();
+//   return true;
+// }
 
 bool RegionModalityBase::VisualizeResults(int save_idx) {
   if (!IsSetup()) return false;

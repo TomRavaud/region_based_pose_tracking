@@ -50,7 +50,7 @@ using namespace Eigen;
 // Define a trampoline for the RegionModalityBase class in order to be able to
 // override the CalculateCorrespondences and StartModality methods in Python
 struct PyRegionModalityBase : RegionModalityBase {
-    NB_TRAMPOLINE(RegionModalityBase, 2);
+    NB_TRAMPOLINE(RegionModalityBase, 3);
 
     bool StartModality(int iteration, int corr_iteration) override {
         NB_OVERRIDE_NAME(
@@ -63,6 +63,12 @@ struct PyRegionModalityBase : RegionModalityBase {
             "calculate_correspondences",
             CalculateCorrespondences,
             iteration, corr_iteration);
+    }
+    bool CalculateResults(int iteration) override {
+        NB_OVERRIDE_NAME(
+            "calculate_results",
+            CalculateResults,
+            iteration);
     }
 };
 
@@ -253,11 +259,13 @@ NB_MODULE(_pym3t_mod, m){
              "name"_a, "optimizer"_a, "link2world_pose"_a, "reset_joint_poses"_a)
         ;
     
+    // ColorHistograms
     nb::class_<ColorHistograms>(m, "ColorHistograms")
         .def(nb::init<const std::string &, int, float, float>(),
              "name"_a, "n_bins"_a=16, "learning_rate_f"_a=0.2f, "learning_rate_b"_a=0.2f)
         .def("ClearMemory", &ColorHistograms::ClearMemory)
         .def("InitializeHistograms", &ColorHistograms::InitializeHistograms)
+        .def("UpdateHistograms", &ColorHistograms::UpdateHistograms)
         ;
 
 
