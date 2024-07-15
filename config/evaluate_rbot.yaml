@@ -9,7 +9,18 @@ geometry_unit_in_meter: 0.001
 
 # Metrics to evaluate
 metrics:
-  - cm_degree_score
+  - cm_degree_score:
+      threshold_trans: 5
+      threshold_rot: 5
+
+# Whether to reset the pose of the object if the tracking is lost regarding
+# the given criterion
+reset_pose:
+  do_reset: true
+  criterion:
+    cm_degree_score:
+      threshold_trans: 5
+      threshold_rot: 5
 
 # Choose the scenes and models to evaluate
 scenes_models_dict:
@@ -22,3 +33,8 @@ scenes_models_dict:
 
 # To evaluate all scenes and models, use the following
 # scenes_models_dict: all
+
+# Number of images (the first image of the sequence is not counted)
+nb_images_per_sequence: 10
+
+log_dir: logs

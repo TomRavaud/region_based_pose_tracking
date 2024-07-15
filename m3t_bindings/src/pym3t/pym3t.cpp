@@ -108,6 +108,7 @@ NB_MODULE(_pym3t_mod, m){
         .def_prop_rw("n_update_iterations",
                      &Tracker::n_update_iterations,
                      &Tracker::set_n_update_iterations)
+        .def_prop_ro("modalities", &Tracker::modality_ptrs)
         ;
     
     // RendererGeometry
@@ -163,6 +164,9 @@ NB_MODULE(_pym3t_mod, m){
             std::ostringstream oss;
             oss << t.matrix();
             return "Transform3fA(\n" + oss.str() + "\n)";
+        })
+        .def_prop_ro("matrix", [](const Transform3fA &t) {
+            return t.matrix();
         })
         ;
     

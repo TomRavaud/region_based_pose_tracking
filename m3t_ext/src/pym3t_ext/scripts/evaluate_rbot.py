@@ -1,5 +1,6 @@
 # Standard libraries
 from pathlib import Path
+import datetime
 
 # Third-party libraries
 import omegaconf
@@ -32,39 +33,6 @@ def evaluate(config: omegaconf.DictConfig) -> None:
             "The 'scenes_models_dict' key is missing in the configuration file."
         )
     
-    if config.dataset_name == "rbot":
-        # Load camera intrinsics
-        camera_intrinsics_file = Path(config.dataset_dir) / "camera_calibration.txt"
-        with open(camera_intrinsics_file, "r") as f:
-            f.readline()  # Skip the first line
-            line = f.readline()
-        # Parse intrinsics
-        fu, fv, ppu, ppv = line.split("\t")[:4]
-        # Create intrinsics dictionary
-        intrinsics = {
-            "fu": float(fu),
-            "fv": float(fv),
-            "ppu": float(ppu),
-            "ppv": float(ppv),
-            "width": config.image_size.width,
-            "height": config.image_size.height,
-        } 
-        
-        # Load the initial body2world GT pose
-        poses_file = Path(config.dataset_dir) / "poses_first.txt"
-        with open(poses_file, "r") as f:
-            f.readline()  # Skip the first line
-            line = f.readline()
-        # Parse the pose components
-        pose_components = list(map(float, line.strip("\n").split("\t")))
-        # Create the homogenous transformation matrix as a list of lists
-        body2world_pose = [
-            pose_components[:3] + [pose_components[9]*1e-3],
-            pose_components[3:6] + [pose_components[10]*1e-3],
-            pose_components[6:9] + [pose_components[11]*1e-3],
-            [0, 0, 0, 1],
-        ]
- 
     for scene, models in scenes_models_dict.items():
         for model in models:
             print(f"Scene: {scene}, Model: {model}")
@@ -75,9 +43,13 @@ def evaluate(config: omegaconf.DictConfig) -> None:
                 "dataset_dir": config.dataset_dir,
                 "model": model,
                 "scene": scene,
+                "image_size": config.image_size,
                 "geometry_unit_in_meter": config.geometry_unit_in_meter,
-                "intrinsics": intrinsics,
-                "body2world_pose": body2world_pose,
+                "metrics": config.metrics,
+                "reset_pose": config.reset_pose,
+                "nb_images": config.nb_images_per_sequence,
+                "display_images": False,
+                "log_dir": config.log_dir,
             })
             
             # Run tracking
@@ -91,6 +63,14 @@ if __name__ == "__main__":
 
     # Read config file
     config = omegaconf.OmegaConf.load(config_path)
+    
+    # Create the log directory
+    log_dir =\
+        Path(config.log_dir) / datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Update the log directory in the configuration
+    config.log_dir = str(log_dir)
  
     # Run evaluation
     evaluate(config)

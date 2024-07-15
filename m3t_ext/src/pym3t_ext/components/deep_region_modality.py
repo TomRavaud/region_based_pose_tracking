@@ -34,8 +34,9 @@ class DeepRegionModality(pym3t.RegionModalityBase):
     _predicted_probabilistic_mask = None
     
     # Model trained on 320x240 images
+    _segmentation_size = (240, 320)
     _resize_transform = CropResizeToAspectTransform(
-        resize=(240, 320)
+        resize=_segmentation_size,
     )
     
     # RBOT images are 640x512
@@ -396,9 +397,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                     handle_occlusions and body_visible_depth,
                 ):
                     continue
-                
-                # NOTE: we can discard lines that cross the cropped area here (because
-                # of the resizing)
+                                
                 
                 # Original method
                 # Compute the probabilistic segmentations (foreground and background) of
@@ -433,6 +432,28 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                     points=line_pixels_coordinates,
                     orig_size=self._original_image_size,
                 )
+                
+                # Discard lines that cross the cropped area here (because of the
+                # resizing)
+                min_x = min(
+                    line_pixels_coordinates[0, 0],
+                    line_pixels_coordinates[-1, 0]
+                )
+                max_x = max(
+                    line_pixels_coordinates[0, 0],
+                    line_pixels_coordinates[-1, 0]
+                )
+                min_y = min(
+                    line_pixels_coordinates[0, 1],
+                    line_pixels_coordinates[-1, 1]
+                )
+                max_y = max(
+                    line_pixels_coordinates[0, 1],
+                    line_pixels_coordinates[-1, 1]
+                )
+                if min_x < 0 or min_y < 0 or max_x >= self._segmentation_size[1]\
+                    or max_y >= self._segmentation_size[0]:
+                    continue
                 
                 # Compute the probabilistic segmentations (P(mf|y) and P(mb|y)) of
                 # each pixel of the line using the probabilistic segmentation mask

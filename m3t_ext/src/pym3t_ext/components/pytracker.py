@@ -1,13 +1,18 @@
 # Standard libraries
 from time import time
+from pathlib import Path
 
 # Third-party libraries
 import cv2
 from tabulate import tabulate
 import numpy as np
+from tqdm import tqdm
 
 # Custom libraries
 import pym3t
+from pym3t_ext.toolbox.geometry.metrics import (
+    cm_degree_score,
+)
 
 
 class PyTracker(pym3t.Tracker):
@@ -16,25 +21,44 @@ class PyTracker(pym3t.Tracker):
     """
     def run_tracker_process(
         self,
+        model: str = "model",
+        scene: str = "scene",
         execute_detection_and_start_tracking: bool = True,
         nb_images: int = 100,
         display_images: bool = False,
         stop_at_each_image: bool = False,
         display_timings: bool = True,
+        body2world_poses_gt: np.ndarray = None,
+        body: pym3t.Body = None,
+        reset_pose: dict = None,
+        metrics: list = None,
+        log_dir: Path = None,
     ) -> bool:
         """Run the tracking process for a given number of iterations.
         Re-implementation of the pym3t.Tracker::RunTrackerProcess method, but
         not an override.
 
         Args:
+            model (str, optional): Model name. Defaults to "model".
+            scene (str, optional): Scene name. Defaults to "scene".
             execute_detection_and_start_tracking (bool, optional): Whether to execute
                 the detection step and start the tracking process. Defaults to True.
             nb_images (int, optional): Number of images to process. Defaults to 100.
+            display_images (bool, optional): Whether to display the images. Defaults
+                to False.
             stop_at_each_image (bool, optional): Whether to stop at each image. Defaults
                 to False.
             display_timings (bool, optional): Whether to display the timings of each
                 step of the tracking process at the end of the iterations. Defaults to
                 True.
+            body2world_poses_gt (np.ndarray, optional): Ground truth poses of the object
+                in the world frame. Defaults to None.
+            body (pym3t.Body, optional): Body object. Defaults to None.
+            reset_pose (dict, optional): Dictionary containing the reset pose criterion.
+                Defaults to None.
+            metrics (list, optional): List of dictionaries containing the metrics to
+                compute. Defaults to None.
+            log_dir (Path, optional): Directory to save the scores. Defaults to None.
 
         Returns:
             bool: Whether the tracking process was successful.
@@ -64,8 +88,11 @@ class PyTracker(pym3t.Tracker):
             "Total": 0.0,
         }
         
+        # Array to store the metrics
+        scores = np.zeros((nb_images, 3*len(metrics)))
+        
         # Tracking process
-        for i in range(nb_images):
+        for i in tqdm(range(nb_images)):
             
             t_start_i = time()
             
@@ -130,7 +157,61 @@ class PyTracker(pym3t.Tracker):
                 if k == ord("q"):
                     nb_images_done = i + 1
                     break
-        
+            
+            
+            # Metrics and reset pose if needed
+            if body is not None and body2world_poses_gt is not None:
+                # Get the object pose relative to the camera frame
+                pose_refined = body.body2world_pose.matrix.copy()
+                pose_gt = body2world_poses_gt[i+1]
+                
+                # Compute the metrics
+                if metrics is not None:
+                    for j, metric in enumerate(metrics):
+
+                        if list(metrics[0].keys())[0] == "cm_degree_score":
+                            scores[i, j:j+3] =\
+                                cm_degree_score(
+                                    T_gt=pose_gt,
+                                    T_est=pose_refined,
+                                    threshold_trans=\
+                                        metric["cm_degree_score"]["threshold_trans"],
+                                    threshold_rot=\
+                                        metric["cm_degree_score"]["threshold_rot"],
+                                )
+                        else:
+                            raise ValueError(f"Unknown metric: {metric}")
+   
+                # Reset the body2world pose to the GT pose if the tracking is lost
+                if reset_pose is not None and reset_pose.do_reset:
+                    
+                    criterion = reset_pose.criterion
+                    
+                    if list(criterion.keys())[0] == "cm_degree_score":
+                        _, _, success = cm_degree_score(
+                            T_gt=pose_gt,
+                            T_est=pose_refined,
+                            threshold_trans=\
+                                criterion["cm_degree_score"]["threshold_trans"],
+                            threshold_rot=\
+                                criterion["cm_degree_score"]["threshold_rot"],
+                        )
+                    else:
+                        raise ValueError(f"Unknown criterion: {criterion}")
+                    
+                    # Tracking is lost
+                    if not success:
+                        # Reset the body2world pose to the GT pose
+                        body.body2world_pose = pym3t.Transform3fA(
+                            np.array(pose_gt, dtype=np.float32)
+                        )
+                        # Restart the modalities
+                        for modality in self.modalities:
+                            if type(modality).__name__ == "DeepRegionModality":
+                                modality.start_modality(0, 0)
+                            else:
+                                modality.StartModality(0, 0)
+                        
         # Display timings
         if nb_images_done > 0 and display_timings:
 
@@ -150,5 +231,9 @@ class PyTracker(pym3t.Tracker):
                 numalign="center",
             )
             print(output)
+        
+        # Save the scores
+        if log_dir is not None:
+            np.save(log_dir / f"scores_{model}_{scene}.npy", scores)
         
         return True

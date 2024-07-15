@@ -9,4 +9,9 @@ build/
 /tmp/*
 !/tmp/.gitkeep
 
+/logs/*
+!/logs/.gitkeep
+
 /weights/*
+
+/notebooks
