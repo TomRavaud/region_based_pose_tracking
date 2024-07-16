@@ -13,5 +13,6 @@ build/
 !/logs/.gitkeep
 
 /weights/*
+!/weights/.gitkeep
 
 /notebooks

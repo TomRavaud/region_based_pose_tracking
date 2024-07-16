@@ -236,6 +236,7 @@ NB_MODULE(_pym3t_mod, m){
                       const std::shared_ptr<ColorCamera> &,
                       const std::shared_ptr<RegionModel> &>(),
              "name"_a, "body"_a, "color_camera"_a, "region_model"_a)
+        .def("StartModality", &RegionModality::StartModality)
         .def_prop_rw("visualize_lines_correspondence",
                      &RegionModality::visualize_lines_correspondence,
                      &RegionModality::set_visualize_lines_correspondence)

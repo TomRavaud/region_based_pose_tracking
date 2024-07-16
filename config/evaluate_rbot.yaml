@@ -7,6 +7,10 @@ image_size:
 
 geometry_unit_in_meter: 0.001
 
+# Modality to use for tracking
+# (region_modality or deep_region_modality)
+modality: region_modality
+
 # Metrics to evaluate
 metrics:
   - cm_degree_score:
@@ -23,18 +27,18 @@ reset_pose:
       threshold_rot: 5
 
 # Choose the scenes and models to evaluate
-scenes_models_dict:
-  a_regular:
-    - ape
-    - cat
-  b_dynamiclight:
-    - ape
-    - phone
+# scenes_models_dict:
+#   a_regular:
+#     - ape
+#     - cat
+#   b_dynamiclight:
+#     - ape
+#     - phone
 
 # To evaluate all scenes and models, use the following
-# scenes_models_dict: all
+scenes_models_dict: all
 
 # Number of images (the first image of the sequence is not counted)
-nb_images_per_sequence: 10
+nb_images_per_sequence: 1000
 
 log_dir: logs

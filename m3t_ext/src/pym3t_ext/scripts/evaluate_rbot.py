@@ -45,6 +45,7 @@ def evaluate(config: omegaconf.DictConfig) -> None:
                 "scene": scene,
                 "image_size": config.image_size,
                 "geometry_unit_in_meter": config.geometry_unit_in_meter,
+                "modality": config.modality,
                 "metrics": config.metrics,
                 "reset_pose": config.reset_pose,
                 "nb_images": config.nb_images_per_sequence,
@@ -54,7 +55,6 @@ def evaluate(config: omegaconf.DictConfig) -> None:
             
             # Run tracking
             track(track_config)
-
 
 
 if __name__ == "__main__":

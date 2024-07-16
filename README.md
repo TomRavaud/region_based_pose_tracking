@@ -36,9 +36,23 @@ To remove the conda environment, you can use the following command:
 conda remove -n pym3t --all
 ```
 
+## Datasets
+
+Datasets used in this work are [RBOT](https://www.mi.hs-rm.de/~schwan/research/RBOT/)
+and [BCOT](https://ar3dv.github.io/BCOT-Benchmark/).
+Our code assumes that the datasets are downloaded and extracted in the `data` folder.
+
 ## Usage
 
-You can run the provided example using the following command:
+You can run the provided example (on RBOT) using the following command:
 
 ```bash
-python -m pym3t_ext.scripts.example_rbot
+python -m pym3t_ext.scripts.track
+```
+
+Note that if you intend to run the scripts headless, you can use the tool `Xvfb`:
+
+```bash
+Xvfb :1 -screen 0 640x480x24 &
+export DISPLAY=:1
+```

@@ -107,13 +107,23 @@ def track(config: omegaconf.DictConfig) -> int:
         model_path=f"tmp/{config.model}_region_model.bin",
     )
     
-    # Set up deep region modality
-    region_modality = DeepRegionModality(
-        name=f"{config.model}_deep_region_modality",
-        body=body,
-        color_camera=color_camera,
-        region_model=region_model,
-    )
+    # Set up the modality
+    if config.modality == "region_modality":
+        region_modality = pym3t.RegionModality(
+            name=f"{config.model}_region_modality",
+            body=body,
+            color_camera=color_camera,
+            region_model=region_model,
+        )
+    elif config.modality == "deep_region_modality":
+        region_modality = DeepRegionModality(
+            name=f"{config.model}_deep_region_modality",
+            body=body,
+            color_camera=color_camera,
+            region_model=region_model,
+        )
+    else:
+        raise ValueError(f"Unknown modality: {config.modality}")
     
     # Set up link
     link = pym3t.Link(

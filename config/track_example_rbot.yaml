@@ -10,6 +10,10 @@ image_size:
 
 geometry_unit_in_meter: 0.001
 
+# Modality to use for tracking
+# (region_modality or deep_region_modality)
+modality: region_modality
+
 # Metrics to evaluate
 metrics:
   - cm_degree_score:

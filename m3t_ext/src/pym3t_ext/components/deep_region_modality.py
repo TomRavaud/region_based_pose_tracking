@@ -74,7 +74,8 @@ class DeepRegionModality(pym3t.RegionModalityBase):
             self.color_histograms.InitializeHistograms()
         
         # Load the prediction module
-        self.load_prediction_module()
+        if self._prediction_module is None:
+            self.load_prediction_module()
         
         #-------------------------------------------------#
         # Initialize the probabilistic segmentation model #
