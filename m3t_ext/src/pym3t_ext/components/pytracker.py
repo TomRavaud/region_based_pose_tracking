@@ -31,7 +31,8 @@ class PyTracker(pym3t.Tracker):
         body2world_poses_gt: np.ndarray = None,
         body: pym3t.Body = None,
         reset_pose: dict = None,
-        metrics: list = None,
+        # TODO: to remove
+        # metrics: list = None,
         log_dir: Path = None,
     ) -> bool:
         """Run the tracking process for a given number of iterations.
@@ -56,8 +57,9 @@ class PyTracker(pym3t.Tracker):
             body (pym3t.Body, optional): Body object. Defaults to None.
             reset_pose (dict, optional): Dictionary containing the reset pose criterion.
                 Defaults to None.
-            metrics (list, optional): List of dictionaries containing the metrics to
-                compute. Defaults to None.
+            # TODO: to remove
+            # metrics (list, optional): List of dictionaries containing the metrics to
+            #     compute. Defaults to None.
             log_dir (Path, optional): Directory to save the scores. Defaults to None.
 
         Returns:
@@ -88,8 +90,23 @@ class PyTracker(pym3t.Tracker):
             "Total": 0.0,
         }
         
-        # Array to store the metrics
-        scores = np.zeros((nb_images, 3*len(metrics)))
+        # TODO: to remove
+        # # Array to store the metrics
+        # scores = np.zeros((nb_images, 3*len(metrics)))
+        
+        if log_dir is not None:
+            # Create a text file to store the poses
+            with open(log_dir / f"poses_{model}_{scene}.txt", "w") as f:
+                f.write("r11\tr12\tr13\tr21\tr22\tr23\tr31\tr32\tr33\ttx\tty\ttz\n")
+                if body2world_poses_gt is not None:
+                # Write the initial GT pose
+                    pose_gt = body2world_poses_gt[0]
+                    f.write(
+                        f"{pose_gt[0, 0]}\t{pose_gt[0, 1]}\t{pose_gt[0, 2]}\t"
+                        f"{pose_gt[1, 0]}\t{pose_gt[1, 1]}\t{pose_gt[1, 2]}\t"
+                        f"{pose_gt[2, 0]}\t{pose_gt[2, 1]}\t{pose_gt[2, 2]}\t"
+                        f"{pose_gt[0, 3]}\t{pose_gt[1, 3]}\t{pose_gt[2, 3]}\n"
+                    )
         
         # Tracking process
         for i in tqdm(range(nb_images)):
@@ -159,28 +176,44 @@ class PyTracker(pym3t.Tracker):
                     break
             
             
-            # Metrics and reset pose if needed
-            if body is not None and body2world_poses_gt is not None:
+            if body is not None:
                 # Get the object pose relative to the camera frame
                 pose_refined = body.body2world_pose.matrix.copy()
+            
+            if log_dir is not None:
+                # Save the pose
+                with open(log_dir / f"poses_{model}_{scene}.txt", "a") as f:
+                    f.write(
+                        f"{pose_refined[0, 0]}\t{pose_refined[0, 1]}\t"
+                        f"{pose_refined[0, 2]}\t{pose_refined[1, 0]}\t"
+                        f"{pose_refined[1, 1]}\t{pose_refined[1, 2]}\t"
+                        f"{pose_refined[2, 0]}\t{pose_refined[2, 1]}\t"
+                        f"{pose_refined[2, 2]}\t{pose_refined[0, 3]}\t"
+                        f"{pose_refined[1, 3]}\t{pose_refined[2, 3]}\n"
+                    )
+            
+            # Reset pose if needed
+            if body is not None and body2world_poses_gt is not None:
+                # Get the GT pose
                 pose_gt = body2world_poses_gt[i+1]
                 
-                # Compute the metrics
-                if metrics is not None:
-                    for j, metric in enumerate(metrics):
+                # TODO: to remove
+                # # Compute the metrics
+                # if metrics is not None:
+                #     for j, metric in enumerate(metrics):
 
-                        if list(metrics[0].keys())[0] == "cm_degree_score":
-                            scores[i, j:j+3] =\
-                                cm_degree_score(
-                                    T_gt=pose_gt,
-                                    T_est=pose_refined,
-                                    threshold_trans=\
-                                        metric["cm_degree_score"]["threshold_trans"],
-                                    threshold_rot=\
-                                        metric["cm_degree_score"]["threshold_rot"],
-                                )
-                        else:
-                            raise ValueError(f"Unknown metric: {metric}")
+                #         if list(metrics[0].keys())[0] == "cm_degree_score":
+                #             scores[i, j:j+3] =\
+                #                 cm_degree_score(
+                #                     T_gt=pose_gt,
+                #                     T_est=pose_refined,
+                #                     threshold_trans=\
+                #                         metric["cm_degree_score"]["threshold_trans"],
+                #                     threshold_rot=\
+                #                         metric["cm_degree_score"]["threshold_rot"],
+                #                 )
+                #         else:
+                #             raise ValueError(f"Unknown metric: {metric}")
    
                 # Reset the body2world pose to the GT pose if the tracking is lost
                 if reset_pose is not None and reset_pose.do_reset:
@@ -232,8 +265,9 @@ class PyTracker(pym3t.Tracker):
             )
             print(output)
         
-        # Save the scores
-        if log_dir is not None:
-            np.save(log_dir / f"scores_{model}_{scene}.npy", scores)
+        # TODO: to remove
+        # # Save the scores
+        # if log_dir is not None:
+            # np.save(log_dir / f"scores_{model}_{scene}.npy", scores)
         
         return True

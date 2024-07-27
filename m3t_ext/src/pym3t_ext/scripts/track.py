@@ -29,6 +29,7 @@ def track(config: omegaconf.DictConfig) -> int:
         name="tracker",
         synchronize_cameras=False,
     )
+    tracker.n_corr_iterations = 7
 
     # Set up renderer geometry
     renderer_geometry = pym3t.RendererGeometry(
@@ -115,6 +116,11 @@ def track(config: omegaconf.DictConfig) -> int:
             color_camera=color_camera,
             region_model=region_model,
         )
+        region_modality.function_amplitude = 0.36
+        region_modality.function_slope = 0.0
+        region_modality.scales = [5, 2, 2, 1]
+        region_modality.standard_deviations = [20.0, 7.0, 3.0, 1.5]
+        
     elif config.modality == "deep_region_modality":
         region_modality = DeepRegionModality(
             name=f"{config.model}_deep_region_modality",
@@ -189,7 +195,8 @@ def track(config: omegaconf.DictConfig) -> int:
         body2world_poses_gt=body2world_poses_gt,
         body=body,
         reset_pose=config.reset_pose,
-        metrics=config.metrics,
+        # TODO: to remove
+        # metrics=config.metrics,
         log_dir=Path(config.log_dir),
     ):
         return -1

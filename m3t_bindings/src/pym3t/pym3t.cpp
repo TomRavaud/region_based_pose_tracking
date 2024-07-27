@@ -105,6 +105,9 @@ NB_MODULE(_pym3t_mod, m){
              "names_starting"_a=nullptr)
         .def_prop_ro("set_up", &Tracker::set_up)
         .def_prop_ro("name", &Tracker::name)
+        .def_prop_rw("n_corr_iterations",
+                     &Tracker::n_corr_iterations,
+                     &Tracker::set_n_corr_iterations)
         .def_prop_rw("n_update_iterations",
                      &Tracker::n_update_iterations,
                      &Tracker::set_n_update_iterations)
@@ -243,6 +246,18 @@ NB_MODULE(_pym3t_mod, m){
         .def_prop_rw("visualize_points_optimization",
                      &RegionModality::visualize_points_optimization,
                      &RegionModality::set_visualize_points_optimization)
+        .def_prop_rw("function_amplitude",
+                     &RegionModality::function_amplitude,
+                     &RegionModality::set_function_amplitude)
+        .def_prop_rw("function_slope",
+                     &RegionModality::function_slope,
+                     &RegionModality::set_function_slope)
+        .def_prop_rw("scales",
+                     &RegionModality::scales,
+                     &RegionModality::set_scales)
+        .def_prop_rw("standard_deviations",
+                     &RegionModality::standard_deviations,
+                     &RegionModality::set_standard_deviations)
         ;
     
     // Optimizer

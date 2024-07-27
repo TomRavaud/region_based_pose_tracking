@@ -46,7 +46,8 @@ def evaluate(config: omegaconf.DictConfig) -> None:
                 "image_size": config.image_size,
                 "geometry_unit_in_meter": config.geometry_unit_in_meter,
                 "modality": config.modality,
-                "metrics": config.metrics,
+                # TODO: to remove
+                # "metrics": config.metrics,
                 "reset_pose": config.reset_pose,
                 "nb_images": config.nb_images_per_sequence,
                 "display_images": False,

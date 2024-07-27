@@ -1,5 +1,5 @@
 dataset_name: rbot
-dataset_dir: data/RBOT
+dataset_dir: data/RBOT_dataset_raw
 
 image_size:
   height: 512
@@ -11,11 +11,12 @@ geometry_unit_in_meter: 0.001
 # (region_modality or deep_region_modality)
 modality: region_modality
 
-# Metrics to evaluate
-metrics:
-  - cm_degree_score:
-      threshold_trans: 5
-      threshold_rot: 5
+# TODO: to remove
+# # Metrics to evaluate
+# metrics:
+#   - cm_degree_score:
+#       threshold_trans: 5
+#       threshold_rot: 5
 
 # Whether to reset the pose of the object if the tracking is lost regarding
 # the given criterion

@@ -3,8 +3,8 @@ import numpy as np
 
 def cm_degree_score(T_gt: np.ndarray,
                     T_est: np.ndarray,
-                    threshold_trans: float=3.,
-                    threshold_rot: float=3.) -> tuple[float, float, bool]:
+                    threshold_trans: float=5.,
+                    threshold_rot: float=5.) -> tuple[float, float, bool]:
     """Compute the translation and rotation errors between two poses and check
     if they are below a given threshold.
 
