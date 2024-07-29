@@ -11,37 +11,37 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 # Custom libraries
 import pym3t
-from pym3t_ext.toolbox.modules.object_segmentation_prediction_module import (
-    ObjectSegmentationPredictionModule,
-    BatchInferenceData,
+from pym3t_ext.toolbox.modules.object_segmentation_clines_prediction_module import (
+    ObjectSegmentationCLinesPredictionModule,
+    BatchCLinesInferenceData,
 )
-from pym3t_ext.toolbox.modules.probabilistic_segmentation_mlp import (
-    ProbabilisticSegmentationMLP,
+from pym3t_ext.toolbox.modules.probabilistic_segmentation_unet import (
+    ProbabilisticSegmentationUNet,
 )
 from pym3t_ext.toolbox.modules.simple_resnet_module import SimpleResNet
-from pym3t_ext.toolbox.utils.partialclass import partialclass
+from pym3t_ext.toolbox.modules.unet_1d_filmed_module import UNet1d
 from pym3t_ext.toolbox.utils.crop_resize_transform import CropResizeToAspectTransform
 
 
-class DeepRegionModality(pym3t.RegionModalityBase):
+class DeepCLinesRegionModality(pym3t.RegionModalityBase):
     """
     Extension of the pym3t.RegionModalityBase class.
     """
     # Model used for prediction
     _prediction_module = None
     
-    # Probabilistic segmentation mask
-    _predicted_probabilistic_mask = None
-    
     # Model trained on 320x240 images
     _segmentation_size = (240, 320)
     _resize_transform = CropResizeToAspectTransform(
         resize=_segmentation_size,
     )
-    _resize_probabilistic_map = True
     
     # RBOT images are 640x512
     _original_image_size = (512, 640)
+    
+    # Lines information
+    _clines_max_length = 120
+    _clines_max_number = 200
     
     # Set the device to use
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -86,7 +86,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         
         # Find the bounding box of the contour
         bbox = self.ComputeBoundingBox(view.data_points)
-            
+        
         # Transform the bounding box coordinates to the probabilistic
         # segmentation image space
         bbox = self._resize_transform.point_transform(
@@ -97,8 +97,8 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         # Predict the probabilistic segmentation model
         self.compute_probabilistic_segmentation(
             bbox,
-            pixel_segmentation_only=False,
-            mlp_parameters_prediction_only=True,
+            clines_segmentation_only=False,
+            context_vectors_prediction_only=True,
         )
         
         return True
@@ -109,26 +109,33 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         """
         # Load pre-trained weights
         train_module_state_dict = torch.load(
-            "weights/probabilistic_segmentation.ckpt"
+            "weights/probabilistic_segmentation_clines.ckpt"
         ).get("state_dict")
         
-        SimpleResNet34 = partialclass(
-            SimpleResNet,
+        simple_resnet_34 = SimpleResNet(
             version=34,
             nb_input_channels=4,
+            output_dim=[512,],
             output_logits=True,
         )
-
-        probabilistic_segmentation_model = ProbabilisticSegmentationMLP(
-            net_cls=SimpleResNet34,
-            patch_size=5,
-            mlp_hidden_dims=[64, 32, 16],
-            apply_color_transformations=False,
+        line_segmentation_model = UNet1d(
+            in_channels=3,
+            out_channels=1,
+            channels_list=[16, 32, 64, 128],
+            nb_layers_per_block_encoder=2,
+            nb_layers_bridge=2,
+            nb_layers_per_block_decoder=2,
+            film_dim=512,
             output_logits=False,
+        )
+        probabilistic_segmentation_model = ProbabilisticSegmentationUNet(
+            net=simple_resnet_34,
+            line_segmentation_model=line_segmentation_model,
+            apply_color_transformations=False,
         )
         
         # Instantiate the model used for prediction
-        self._prediction_module = ObjectSegmentationPredictionModule(
+        self._prediction_module = ObjectSegmentationCLinesPredictionModule(
             probabilistic_segmentation_model=probabilistic_segmentation_model,
         )
         
@@ -173,25 +180,29 @@ class DeepRegionModality(pym3t.RegionModalityBase):
     def compute_probabilistic_segmentation(
         self,
         bbox: np.ndarray = None,
-        pixel_segmentation_only: bool = False,
-        mlp_parameters_prediction_only: bool = False,
+        clines_coordinates = None,
+        clines_segmentation_only: bool = False,
+        context_vectors_prediction_only: bool = False,
         visualize: bool = False,
-        resize: bool = True,
     ) -> None:
         """Compute the probabilistic segmentation of the image, or the MLP parameters
         only.
 
         Args:
             bbox (np.ndarray): The bounding box of the contour (only needed to predict
-                the MLP parameters). Defaults to None.
-            pixel_segmentation_only (bool, optional): Whether to recompute the MLP
-                parameters or to use the previous ones. Defaults to False.
-            mlp_parameters_prediction_only (bool, optional): Whether to predict the
-                MLP parameters only, without outputting the pixel segmentation.
-                Defaults to False.
+                the context vectors). Defaults to None.
+            clines_coordinates (np.ndarray, optional): The coordinates of the
+                correspondence lines. Defaults to None.
+            clines_segmentation_only (bool, optional): Whether to recompute the context
+                vectors or to use the previous ones. Defaults to False.
+            context_vectors_prediction_only (bool, optional): Whether to predict the
+                context vectors only, without outputting the correspondence lines
+                segmentation. Defaults to False.
+            visualize (bool, optional): Whether to visualize the output. Defaults to
+                False.
 
         Raises:
-            ValueError: If pixel_segmentation_only and mlp_parameters_prediction_only
+            ValueError: If clines_segmentation_only and context_vectors_prediction_only
                 are True at the same time.
         """
         # Get RGB image
@@ -203,41 +214,68 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         # BGR to RGB
         image_np = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
         
+        # Extract the correspondence lines from the image
+        if clines_coordinates is not None:
+            
+            mask = ~np.all(clines_coordinates == -1, axis=-1)
+            
+            # Fill the contour lines with RGB data, and 0 for points outside the
+            # image
+            clines_rgb = np.zeros(clines_coordinates.shape[:2] + (3,), np.uint8)
+            clines_rgb[mask] = image_np[
+                clines_coordinates[mask][:, 1], clines_coordinates[mask][:, 0]
+            ]
+            
+            # Pad the correspondence lines
+            clines_rgb[:, :self.delta] = clines_rgb[:, self.delta, None]
+            clines_rgb[:, self.delta+self.line_length:] = clines_rgb[
+                :, self.delta+self.line_length-1, None
+            ]
+            
+            # TODO: to remove
+            # cv2.imwrite("image.png", cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR))
+            # cv2.imwrite("clines.png", cv2.cvtColor(clines_rgb, cv2.COLOR_RGB2BGR))
+            # cv2.imwrite("mask.png", mask.astype(np.uint8) * 255)
+        
         # PyTorch conversion
         image_pytorch = torch.from_numpy(image_np)
+        if clines_coordinates is not None:
+            clines_rgb = torch.from_numpy(clines_rgb)
         
         # Set the input data for the prediction module
-        input = BatchInferenceData(
+        input = BatchCLinesInferenceData(
             rgbs=image_pytorch.permute(2, 0, 1).unsqueeze(0),
             contour_points_list=[
                     # First example of the batch
                     [bbox,],
                     # Second example of the batch...
                 ],
+            clines_rgbs=clines_rgb.permute(2, 0, 1).unsqueeze(0)\
+                if clines_coordinates is not None else None,
         )
-        
-        if resize:
-            # Resize the input data
-            input = self._resize_transform(input)
+        # Resize the input image and the bounding box only
+        input = self._resize_transform(input)
         
         # Send the input data to the device
         input.rgbs = input.rgbs.to(self._device)
+        if input.clines_rgbs is not None:
+            input.clines_rgbs = input.clines_rgbs.to(self._device)
         
         # Perform the prediction
-        if pixel_segmentation_only and mlp_parameters_prediction_only:
+        if clines_segmentation_only and context_vectors_prediction_only:
             raise ValueError(
-                "pixel_segmentation_only and mlp_parameters_prediction_only "
+                "clines_segmentation_only and context_vectors_prediction_only "
                 "cannot be True at the same time."
             )
         
-        elif pixel_segmentation_only:
+        elif clines_segmentation_only:
             predicted_probabilistic_masks = self._prediction_module(
                 input,
-                pixel_segmentation_only=True,
-                mlp_parameters_prediction_only=False,
+                clines_segmentation_only=True,
+                context_vectors_prediction_only=False,
             )
             # Convert the first predicted probabilistic mask to numpy
-            self._predicted_probabilistic_mask =\
+            predicted_probabilistic_mask =\
                 predicted_probabilistic_masks[0].cpu().numpy()
             
             if visualize:
@@ -247,19 +285,22 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 cax = divider.append_axes("right", size="5%", pad=0.05)
 
                 # Get the image to set the color scale
-                img = ax.imshow(self._predicted_probabilistic_mask, cmap="magma")
+                img = ax.imshow(predicted_probabilistic_mask, cmap="magma")
                 ax.axis("off")
 
                 # Colorbar
                 fig.colorbar(img, cmap="magma", cax=cax)
 
                 plt.tight_layout()
+                plt.show()
+            
+            return predicted_probabilistic_mask
         
-        elif mlp_parameters_prediction_only:
+        elif context_vectors_prediction_only:
             self._prediction_module(
                 input,
-                pixel_segmentation_only=False,
-                mlp_parameters_prediction_only=True,
+                clines_segmentation_only=False,
+                context_vectors_prediction_only=True,
             )
             
             if visualize:
@@ -277,6 +318,9 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 ax.add_patch(rect)
                 ax.axis("off")
                 plt.tight_layout()
+                plt.show()
+            
+            return
         
         else:
             predicted_probabilistic_masks = self._prediction_module(
@@ -285,11 +329,11 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 mlp_parameters_prediction_only=False,
             )
             # Convert the first predicted probabilistic mask to numpy
-            self._predicted_probabilistic_mask =\
+            predicted_probabilistic_mask =\
                 predicted_probabilistic_masks[0].cpu().numpy()
+            
+            return predicted_probabilistic_mask
         
-        if visualize:
-            plt.show()
 
     def calculate_correspondences(self, iteration: int, corr_iteration: int) -> bool:
         """Calculate the correspondence lines data (center, normal, segment
@@ -352,18 +396,20 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                   f"{len(data_model_points)} < {n_lines}")
             n_lines = len(data_model_points)
         
-        
-        # Compute the probabilistic segmentation only once per image
-        if corr_iteration == 0:
-            
-            # Predict the probabilistic segmentation mask using the
-            # already computed MLP parameters
-            self.compute_probabilistic_segmentation(
-                bbox=None,
-                pixel_segmentation_only=True,
-                mlp_parameters_prediction_only=False,
-                resize=self._resize_probabilistic_map,
+        if self._clines_max_length < self.line_length:
+            raise ValueError(
+                f"Line length ({self.line_length}) is larger than the maximum "
+                f"line length ({self.max_line_length})."
             )
+        if self._clines_max_number < n_lines:
+            raise ValueError(
+                f"Number of lines ({n_lines}) is larger than the maximum number "
+                f"of lines ({self._clines_max_number})."
+            )
+        
+        # Value used to pad the correspondence lines
+        self.delta = (self._clines_max_length - self.line_length) // 2
+        
         
         # Differentiate cases with and without occlusion handling:
         # A. If occlusion handling is enabled:
@@ -379,6 +425,12 @@ class DeepRegionModality(pym3t.RegionModalityBase):
             
             handle_occlusions = (j == 0) and\
                 ((iteration - self.first_iteration) >= self.n_unoccluded_iterations)
+            
+            # Create an array to store correspondence lines coordinates
+            clines_coordinates = np.ones(
+                (self._clines_max_number, self._clines_max_length, 2),
+                dtype=np.int32,
+            ) * -1
 
             # Iterate over n_lines
             for i in range(n_lines):
@@ -397,7 +449,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                     handle_occlusions and body_visible_depth,
                 ):
                     continue
-                                
+                
                 
                 # TODO: to put in a custom structure to avoid copying
                 # Array to store the line pixels coordinates
@@ -414,41 +466,28 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 if not result:
                     continue
                 
-                if self._resize_probabilistic_map:
-                    # Transform the coordinates to the probabilistic segmentation image
-                    # space
-                    line_pixels_coordinates = self._resize_transform.point_transform(
-                        points=line_pixels_coordinates,
-                        orig_size=self._original_image_size,
-                    )
-
-                    # Discard lines that cross the cropped area here (because of the
-                    # resizing)
-                    min_x = min(
-                        line_pixels_coordinates[0, 0],
-                        line_pixels_coordinates[-1, 0]
-                    )
-                    max_x = max(
-                        line_pixels_coordinates[0, 0],
-                        line_pixels_coordinates[-1, 0]
-                    )
-                    min_y = min(
-                        line_pixels_coordinates[0, 1],
-                        line_pixels_coordinates[-1, 1]
-                    )
-                    max_y = max(
-                        line_pixels_coordinates[0, 1],
-                        line_pixels_coordinates[-1, 1]
-                    )
-                    if min_x < 0 or min_y < 0 or max_x >= self._segmentation_size[1]\
-                        or max_y >= self._segmentation_size[0]:
-                        continue
+                # Set the line pixels coordinates
+                clines_coordinates[i, self.delta:self.delta+self.line_length, :] =\
+                    line_pixels_coordinates
                 
-                # Compute the probabilistic segmentations (P(mf|y) and P(mb|y)) of
-                # each pixel of the line using the probabilistic segmentation mask
-                line_pixels_probabilities_f = self._predicted_probabilistic_mask[
-                    line_pixels_coordinates[:, 1],
-                    line_pixels_coordinates[:, 0],
+                self.AddDataLine(data_line)
+                
+
+            # Compute the probabilistic segmentation of all the lines at once
+            clines_probabilities_f = self.compute_probabilistic_segmentation(
+                clines_coordinates=clines_coordinates,
+                clines_segmentation_only=True,
+                context_vectors_prediction_only=False,
+            )
+            
+            # Go through the valid data lines
+            for i, data_line in enumerate(self.data_lines):
+                
+                # Get the probabilistics segmentation (P(mf|y) and P(mb|y)) of each
+                # pixel of the current line
+                line_pixels_probabilities_f = clines_probabilities_f[
+                    i,
+                    self.delta:self.delta+self.line_length,
                 ]
                 line_pixels_probabilities_b = 1 - line_pixels_probabilities_f
                 
@@ -483,9 +522,8 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 # (the noisy posterior distribution will be approximated by a Gaussian
                 # distribution during the optimization process)
                 self.CalculateDistributionMoments(data_line)
-                
-                self.AddDataLine(data_line)
-                
+            
+            
             if len(self.data_lines) >= self.min_n_unoccluded_lines:
                 break
         
@@ -537,8 +575,8 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         # Predict the probabilistic segmentation model
         self.compute_probabilistic_segmentation(
             bbox,
-            pixel_segmentation_only=False,
-            mlp_parameters_prediction_only=True,
+            clines_segmentation_only=False,
+            context_vectors_prediction_only=True,
         )
 
         return True

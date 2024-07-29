@@ -31,8 +31,6 @@ class PyTracker(pym3t.Tracker):
         body2world_poses_gt: np.ndarray = None,
         body: pym3t.Body = None,
         reset_pose: dict = None,
-        # TODO: to remove
-        # metrics: list = None,
         log_dir: Path = None,
     ) -> bool:
         """Run the tracking process for a given number of iterations.
@@ -57,9 +55,6 @@ class PyTracker(pym3t.Tracker):
             body (pym3t.Body, optional): Body object. Defaults to None.
             reset_pose (dict, optional): Dictionary containing the reset pose criterion.
                 Defaults to None.
-            # TODO: to remove
-            # metrics (list, optional): List of dictionaries containing the metrics to
-            #     compute. Defaults to None.
             log_dir (Path, optional): Directory to save the scores. Defaults to None.
 
         Returns:
@@ -89,10 +84,6 @@ class PyTracker(pym3t.Tracker):
             "UpdateViewers": 0.0,
             "Total": 0.0,
         }
-        
-        # TODO: to remove
-        # # Array to store the metrics
-        # scores = np.zeros((nb_images, 3*len(metrics)))
         
         if log_dir is not None:
             # Create a text file to store the poses
@@ -197,24 +188,6 @@ class PyTracker(pym3t.Tracker):
                 # Get the GT pose
                 pose_gt = body2world_poses_gt[i+1]
                 
-                # TODO: to remove
-                # # Compute the metrics
-                # if metrics is not None:
-                #     for j, metric in enumerate(metrics):
-
-                #         if list(metrics[0].keys())[0] == "cm_degree_score":
-                #             scores[i, j:j+3] =\
-                #                 cm_degree_score(
-                #                     T_gt=pose_gt,
-                #                     T_est=pose_refined,
-                #                     threshold_trans=\
-                #                         metric["cm_degree_score"]["threshold_trans"],
-                #                     threshold_rot=\
-                #                         metric["cm_degree_score"]["threshold_rot"],
-                #                 )
-                #         else:
-                #             raise ValueError(f"Unknown metric: {metric}")
-   
                 # Reset the body2world pose to the GT pose if the tracking is lost
                 if reset_pose is not None and reset_pose.do_reset:
                     
@@ -240,7 +213,10 @@ class PyTracker(pym3t.Tracker):
                         )
                         # Restart the modalities
                         for modality in self.modalities:
-                            if type(modality).__name__ == "DeepRegionModality":
+                            if type(modality).__name__ in [
+                                "DeepRegionModality",
+                                "DeepCLinesRegionModality",
+                            ]:
                                 modality.start_modality(0, 0)
                             else:
                                 modality.StartModality(0, 0)
@@ -264,10 +240,5 @@ class PyTracker(pym3t.Tracker):
                 numalign="center",
             )
             print(output)
-        
-        # TODO: to remove
-        # # Save the scores
-        # if log_dir is not None:
-            # np.save(log_dir / f"scores_{model}_{scene}.npy", scores)
         
         return True

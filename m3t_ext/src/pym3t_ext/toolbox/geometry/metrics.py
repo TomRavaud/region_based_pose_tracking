@@ -29,7 +29,15 @@ def cm_degree_score(T_gt: np.ndarray,
     error_trans = np.linalg.norm(t_gt - t_est)
     
     # Rotation error
-    error_rot = np.arccos((np.trace(np.dot(R_est.T, R_gt)) - 1) / 2)
+    arg = (np.trace(np.dot(R_est.T, R_gt)) - 1) / 2
+    # Check if the argument is out of bounds (due to numerical errors)
+    if arg > 1:
+        error_rot = 0
+    elif arg < -1:
+        error_rot = np.pi
+    # Compute the error
+    else:
+        error_rot = np.arccos((np.trace(np.dot(R_est.T, R_gt)) - 1) / 2)
     
     # Convert the translation threshold to meters
     threshold_trans *= 1e-2
