@@ -1,10 +1,8 @@
 # Standard libraries
 import random
-from copy import deepcopy
 
 # Third-party libraries
 import numpy as np
-import torch
 from torchvision.transforms.functional import crop, resize
 
 # Custom modules
@@ -107,6 +105,7 @@ class CropResizeToAspectTransform:
         self,
         points: np.ndarray,
         orig_size: tuple[int, int],
+        valid_borders: bool = False,
     ) -> np.ndarray:
         """Transform points from the original image to the cropped and resized
         image.
@@ -114,6 +113,9 @@ class CropResizeToAspectTransform:
         Args:
             points (np.ndarray): Points in the original image. Shape (N, 2).
             orig_size (tuple[int, int]): Original image size (height, width).
+            valid_borders (bool, optional): If False, points outside the borders
+                are set to -1, otherwise, they are set to the top or bottom border.
+                Defaults to False.
 
         Returns:
             np.ndarray: Points' coordinates in the cropped and resized image.
@@ -143,10 +145,19 @@ class CropResizeToAspectTransform:
             
             # Compute the new coordinates
             points_new = np.zeros_like(points, dtype=np.int32)
-            points_new[is_outside] = -1
             points_new[~is_outside, 0] = points[~is_outside, 0] * resize_factor
             points_new[~is_outside, 1] =\
                 (points[~is_outside, 1] - border) * resize_factor
+            
+            if valid_borders:
+                points_new[is_outside, 0] = points[is_outside, 0] * resize_factor
+                # If the point is above the top border, set it to the top border and
+                # if it is below the bottom border, set it to the bottom border
+                points_new[is_outside, 1] = np.where(
+                    points[is_outside, 1] < border, 0, height_target - 1
+                )
+            else:
+                points_new[is_outside] = -1
             
             return points_new
         

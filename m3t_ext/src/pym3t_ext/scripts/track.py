@@ -116,7 +116,7 @@ def track(config: omegaconf.DictConfig) -> int:
             body=body,
             color_camera=color_camera,
             region_model=region_model,
-        )        
+        )
     elif config.modality == "deep_region_modality":
         region_modality = DeepRegionModality(
             name=f"{config.model}_deep_region_modality",
@@ -130,16 +130,26 @@ def track(config: omegaconf.DictConfig) -> int:
             body=body,
             color_camera=color_camera,
             region_model=region_model,
-        )
+        )        
     else:
         raise ValueError(f"Unknown modality: {config.modality}")
     
+    # TODO: parameter in config file
+    use_region_checking = True
+    if use_region_checking:
+        silhouette_renderer = pym3t.FocusedSilhouetteRenderer(
+            name=f"{config.model}_focused_silhouette_renderer",
+            renderer_geometry=renderer_geometry,
+            camera=color_camera,
+        )
+        silhouette_renderer.AddReferencedBody(body)
+        region_modality.UseRegionChecking(silhouette_renderer)
+
     # RBOT specific parameters (see Stoiber PhD thesis)
     region_modality.function_amplitude = 0.36
     region_modality.function_slope = 0.0
     region_modality.scales = [5, 2, 2, 1]
     region_modality.standard_deviations = [20.0, 7.0, 3.0, 1.5]
-
     
     # Set up link
     link = pym3t.Link(

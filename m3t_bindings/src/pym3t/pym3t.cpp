@@ -395,6 +395,7 @@ NB_MODULE(_pym3t_mod, m){
         // New methods to allow data lines manipulation from Python
         .def("AddDataLine", &RegionModalityBase::AddDataLine)
         .def("ClearDataLines", &RegionModalityBase::ClearDataLines)
+        .def("UseRegionChecking", &RegionModalityBase::UseRegionChecking)
 
         .def_prop_ro("body", &RegionModalityBase::body_ptr)
         .def_prop_ro("depth_renderer", &RegionModalityBase::depth_renderer_ptr)
@@ -427,15 +428,27 @@ NB_MODULE(_pym3t_mod, m){
     nb::class_<Renderer>(m, "Renderer");
     // FocusedRenderer -> not constructible, just to enable automatic downcasting
     // and binding of child classes
-    nb::class_<FocusedRenderer, Renderer>(m, "FocusedRenderer");
+    nb::class_<FocusedRenderer, Renderer>(m, "FocusedRenderer")
+        .def("AddReferencedBody", &FocusedRenderer::AddReferencedBody)
+        ;
     // FocusedDepthRenderer
     nb::class_<FocusedDepthRenderer, FocusedRenderer>(m, "FocusedDepthRenderer")
         .def("IsBodyVisible", &FocusedDepthRenderer::IsBodyVisible)
         .def("FetchDepthImage", &FocusedDepthRenderer::FetchDepthImage)
         ;
     
+    // Commonly used enums
+    nb::enum_<IDType>(m, "IDType")
+        .value("BODY", IDType::BODY)
+        .value("REGION", IDType::REGION)
+        ;
+
     // FocusedSilhouetteRenderer
     nb::class_<FocusedSilhouetteRenderer, FocusedDepthRenderer>(m, "FocusedSilhouetteRenderer")
+        .def(nb::init<const std::string &, const std::shared_ptr<RendererGeometry> &,
+                      const std::shared_ptr<Camera> &, IDType, float, float>(),
+             "name"_a, "renderer_geometry"_a, "camera"_a, "id_type"_a=IDType::REGION,
+             "z_min"_a=0.02f, "z_max"_a=10.0f)
         .def("IsBodyVisible", &FocusedSilhouetteRenderer::IsBodyVisible)
         .def("FetchSilhouetteImage", &FocusedSilhouetteRenderer::FetchSilhouetteImage)
         ;
@@ -455,16 +468,5 @@ NB_MODULE(_pym3t_mod, m){
                 throw std::invalid_argument("Unsupported Mat type");
             }
         })
-        // .def("to_pytorch", [](const cv::Mat &mat) {
-        //     // Check the type of mat and convert accordingly
-        //     if (mat.type() == CV_8UC3) {
-                
-        //         size_t shape[3] = {mat.rows, mat.cols, mat.channels()};
-        //         return nb::ndarray<nb::pytorch, uint8_t, nb::shape<-1, -1, 3>>(
-        //             mat.data, 3, shape, nb::capsule(), nullptr, nb::dtype<uint8_t>(), nb::device::cpu::value, 0);
-        //     } else {
-        //         throw std::invalid_argument("Unsupported Mat type");
-        //     }
-        // })
         ;
 }

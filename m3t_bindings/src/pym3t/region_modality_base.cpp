@@ -1719,6 +1719,25 @@ void RegionModalityBase::ComputeBoundingBox(
     if (u > u_max) u_max = u;
     if (v > v_max) v_max = v;
   }
+
+  // Clamp values to be within image dimensions
+  u_min = std::max(
+    0.0f,
+    std::min(u_min, static_cast<float>(image_width_minus_1_))
+  );
+  v_min = std::max(
+    0.0f,
+    std::min(v_min, static_cast<float>(image_height_minus_1_))
+  );
+  u_max = std::max(
+    0.0f,
+    std::min(u_max, static_cast<float>(image_width_minus_1_))
+  );
+  v_max = std::max(
+    0.0f,
+    std::min(v_max, static_cast<float>(image_height_minus_1_))
+  );
+
   bounding_box(0, 0) = u_min;
   bounding_box(0, 1) = v_min;
   bounding_box(1, 0) = u_max;

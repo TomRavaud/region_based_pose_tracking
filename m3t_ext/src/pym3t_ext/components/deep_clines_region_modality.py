@@ -1,6 +1,3 @@
-# Standard libraries
-from time import time
-
 # Third-party libraries
 import torch
 import cv2
@@ -92,9 +89,10 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         bbox = self._resize_transform.point_transform(
             points=bbox,
             orig_size=self._original_image_size,
+            valid_borders=True,
         )
         
-        # Predict the probabilistic segmentation model
+        # Predict the probabilistic segmentation model (context vectors only)
         self.compute_probabilistic_segmentation(
             bbox,
             clines_segmentation_only=False,
@@ -232,11 +230,6 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 :, self.delta+self.line_length-1, None
             ]
             
-            # TODO: to remove
-            # cv2.imwrite("image.png", cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR))
-            # cv2.imwrite("clines.png", cv2.cvtColor(clines_rgb, cv2.COLOR_RGB2BGR))
-            # cv2.imwrite("mask.png", mask.astype(np.uint8) * 255)
-        
         # PyTorch conversion
         image_pytorch = torch.from_numpy(image_np)
         if clines_coordinates is not None:
@@ -285,13 +278,52 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 cax = divider.append_axes("right", size="5%", pad=0.05)
 
                 # Get the image to set the color scale
-                img = ax.imshow(predicted_probabilistic_mask, cmap="magma")
+                img = ax.imshow(predicted_probabilistic_mask, cmap="bwr")
                 ax.axis("off")
 
                 # Colorbar
-                fig.colorbar(img, cmap="magma", cax=cax)
+                fig.colorbar(img, cmap="bwr", cax=cax)
 
                 plt.tight_layout()
+                
+                # Plot the rgb clines
+                _, ax = plt.subplots()
+                ax.imshow(clines_rgb.cpu().numpy())
+                ax.axis("off")
+                plt.tight_layout()
+                
+                # Display the image
+                _, ax = plt.subplots()
+                ax.imshow(image_np)
+                
+                
+                from matplotlib.collections import LineCollection
+                import matplotlib.cm as cm
+                import matplotlib.colors as mcolors
+                
+                # Choose a colormap
+                cmap = cm.get_cmap('bwr')
+
+                # Normalize the color values
+                norm = mcolors.Normalize(vmin=0, vmax=1) 
+                
+                # Draw lines on the image
+                for i in range(0, clines_coordinates.shape[0], 10):
+                    mask = ~np.all(clines_coordinates[i] == -1, axis=-1)
+                    
+                    points = clines_coordinates[i][mask]
+                    
+                    # Map the normalized values to colors
+                    colors = cmap(norm(predicted_probabilistic_mask[i][mask]))
+                    
+                    segments = np.array([points[:-1], points[1:]]).transpose(1, 0, 2)
+                    lc = LineCollection(segments, colors=colors[:-1], linewidth=1)
+                    
+                    ax.add_collection(lc)
+                
+                ax.axis("off")
+                plt.tight_layout()
+                
                 plt.show()
             
             return predicted_probabilistic_mask
@@ -305,8 +337,9 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
             
             if visualize:
                 # Display the image
+                image_to_display = input.rgbs.squeeze().permute(1, 2, 0).cpu().numpy()
                 _, ax = plt.subplots()
-                ax.imshow(input.rgbs.squeeze().permute(1, 2, 0).cpu().numpy())
+                ax.imshow(image_to_display)
                 rect = patches.Rectangle(
                     (bbox[0, 0], bbox[0, 1]),
                     bbox[1, 0] - bbox[0, 0],
@@ -318,7 +351,16 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 ax.add_patch(rect)
                 ax.axis("off")
                 plt.tight_layout()
+                
+                # Display the SAM binary mask
+                _, ax = plt.subplots()
+                mask = self._prediction_module.model.binary_masks.squeeze().cpu().numpy()
+                ax.imshow(np.where(mask[..., None], image_to_display, 0))
+                ax.axis("off")
+                plt.tight_layout()
+                
                 plt.show()
+                
             
             return
         
@@ -410,7 +452,6 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         # Value used to pad the correspondence lines
         self.delta = (self._clines_max_length - self.line_length) // 2
         
-        
         # Differentiate cases with and without occlusion handling:
         # A. If occlusion handling is enabled:
         #   1. Try to find unoccluded lines. If the number of unoccluded lines is
@@ -431,6 +472,9 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 (self._clines_max_number, self._clines_max_length, 2),
                 dtype=np.int32,
             ) * -1
+            
+            # List to store the indices of the valid lines
+            valid_lines_indices = []
 
             # Iterate over n_lines
             for i in range(n_lines):
@@ -470,19 +514,21 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 clines_coordinates[i, self.delta:self.delta+self.line_length, :] =\
                     line_pixels_coordinates
                 
-                self.AddDataLine(data_line)
+                valid_lines_indices.append(i)
                 
-
+                self.AddDataLine(data_line)
+            
             # Compute the probabilistic segmentation of all the lines at once
             clines_probabilities_f = self.compute_probabilistic_segmentation(
                 clines_coordinates=clines_coordinates,
                 clines_segmentation_only=True,
                 context_vectors_prediction_only=False,
+                visualize=False,
             )
             
             # Go through the valid data lines
-            for i, data_line in enumerate(self.data_lines):
-                
+            for i, data_line in zip(valid_lines_indices, self.data_lines):
+
                 # Get the probabilistics segmentation (P(mf|y) and P(mb|y)) of each
                 # pixel of the current line
                 line_pixels_probabilities_f = clines_probabilities_f[
@@ -564,12 +610,13 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         
         # Find the bounding box of the contour
         bbox = self.ComputeBoundingBox(view.data_points)
-            
+        
         # Transform the bounding box coordinates to the probabilistic
         # segmentation image space
         bbox = self._resize_transform.point_transform(
             points=bbox,
             orig_size=self._original_image_size,
+            valid_borders=True,
         )
         
         # Predict the probabilistic segmentation model

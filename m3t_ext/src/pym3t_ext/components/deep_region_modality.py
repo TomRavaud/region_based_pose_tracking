@@ -1,6 +1,3 @@
-# Standard libraries
-from time import time
-
 # Third-party libraries
 import torch
 import cv2
@@ -92,6 +89,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         bbox = self._resize_transform.point_transform(
             points=bbox,
             orig_size=self._original_image_size,
+            valid_borders=True,
         )
         
         # Predict the probabilistic segmentation model
@@ -532,6 +530,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         bbox = self._resize_transform.point_transform(
             points=bbox,
             orig_size=self._original_image_size,
+            valid_borders=True,
         )
         
         # Predict the probabilistic segmentation model
