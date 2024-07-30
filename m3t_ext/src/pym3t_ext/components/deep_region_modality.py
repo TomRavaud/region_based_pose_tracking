@@ -38,7 +38,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
     _resize_transform = CropResizeToAspectTransform(
         resize=_segmentation_size,
     )
-    _resize_probabilistic_map = True
+    _resize_probabilistic_map = False
     
     # RBOT images are 640x512
     _original_image_size = (512, 640)

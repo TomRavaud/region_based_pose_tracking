@@ -12,6 +12,9 @@ build/
 /logs/*
 !/logs/.gitkeep
 
+/results/*
+!/results/.gitkeep
+
 /weights/*
 !/weights/.gitkeep
 

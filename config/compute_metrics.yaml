@@ -1,0 +1,25 @@
+# Where to find estimated poses
+log_dir: logs
+experiment_name: 2024-07-29_11-39-18_deep_mlp_without_resize
+# 2024-07-29_03-36-03_m3t_rbot_total_matrices
+# 2024-07-29_11-32-45_deep_clines
+# 2024-07-29_11-34-24_deep_mlp_with_resize
+# 2024-07-29_11-39-18_deep_mlp_without_resize
+
+
+# Where to find ground truth poses
+dataset_name: rbot
+dataset_dir: data/RBOT_dataset_raw
+
+# Whether to compute the metrics for the first frame
+# (we discard it as it is often set to the ground truth)
+skip_first_frame: true
+
+# Metrics to evaluate
+metrics:
+  - cm_degree_score:
+      threshold_trans: 5
+      threshold_rot: 5
+      name: ${metrics.0.cm_degree_score.threshold_trans}cm_${metrics.0.cm_degree_score.threshold_rot}deg
+  
+result_dir: results

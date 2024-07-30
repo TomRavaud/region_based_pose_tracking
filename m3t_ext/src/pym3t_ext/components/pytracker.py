@@ -194,7 +194,7 @@ class PyTracker(pym3t.Tracker):
                     criterion = reset_pose.criterion
                     
                     if list(criterion.keys())[0] == "cm_degree_score":
-                        _, _, success = cm_degree_score(
+                        success = cm_degree_score(
                             T_gt=pose_gt,
                             T_est=pose_refined,
                             threshold_trans=\

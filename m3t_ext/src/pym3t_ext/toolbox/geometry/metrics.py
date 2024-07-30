@@ -48,4 +48,4 @@ def cm_degree_score(T_gt: np.ndarray,
     # Check if the error is below the threshold
     success = error_trans < threshold_trans and error_rot < threshold_rot
     
-    return error_trans, error_rot, success
+    return success
