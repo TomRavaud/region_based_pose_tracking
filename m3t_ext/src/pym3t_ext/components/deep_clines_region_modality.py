@@ -21,6 +21,7 @@ from pym3t_ext.toolbox.modules.probabilistic_segmentation_unet import (
 from pym3t_ext.toolbox.modules.simple_resnet_module import SimpleResNet
 from pym3t_ext.toolbox.modules.unet_1d_filmed_module import UNet1d
 from pym3t_ext.toolbox.utils.crop_resize_transform import CropResizeToAspectTransform
+from pym3t_ext.toolbox.utils.crop_object_transform import CropObjectTransform
 
 
 class DeepCLinesRegionModality(pym3t.RegionModalityBase):
@@ -87,20 +88,21 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         # Find the bounding box of the contour
         bbox = self.ComputeBoundingBox(view.data_points)
         
+        #NOTE: commented
         # Transform the bounding box coordinates to the probabilistic
         # segmentation image space
-        bbox = self._resize_transform.point_transform(
-            points=bbox,
-            orig_size=self._original_image_size,
-            valid_borders=True,
-        )
+        # bbox = self._resize_transform.point_transform(
+        #     points=bbox,
+        #     orig_size=self._original_image_size,
+        #     valid_borders=True,
+        # )
         
         # Predict the probabilistic segmentation model (context vectors only)
         self.compute_probabilistic_segmentation(
             bbox,
             clines_segmentation_only=False,
             context_vectors_prediction_only=True,
-            visualize=False,
+            visualize=True,
         )
         
         return True
@@ -233,25 +235,64 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
             clines_rgb[:, self.delta+self.line_length:] = clines_rgb[
                 :, self.delta+self.line_length-1, None
             ]
-            
+        
         # PyTorch conversion
-        image_pytorch = torch.from_numpy(image_np)
+        image_pytorch = torch.from_numpy(image_np).permute(2, 0, 1)
         if clines_coordinates is not None:
-            clines_rgb = torch.from_numpy(clines_rgb)
+            clines_rgb = torch.from_numpy(clines_rgb).permute(2, 0, 1)
+        
+        if bbox is not None:
+            # Crop and resize the image and the bounding box
+            crop_object_transform = CropObjectTransform(
+                resize=self._segmentation_size,
+                scale_factor=0.8,
+            )
+            image_pytorch, bbox = crop_object_transform(image_pytorch, bbox)
+        
+        
+        #TODO: to remove
+        # plt.figure()
+        # plt.subplot(1, 2, 1)
+        # plt.imshow(image.permute(1, 2, 0).numpy())
+        # # Plot the bounding box
+        # rect = patches.Rectangle(
+        #     (bbox[0, 0], bbox[0, 1]),
+        #     bbox[1, 0] - bbox[0, 0],
+        #     bbox[1, 1] - bbox[0, 1],
+        #     linewidth=1,
+        #     edgecolor="r",
+        #     facecolor="none",
+        # )
+        # plt.gca().add_patch(rect)
+        # plt.subplot(1, 2, 2)
+        # plt.imshow(crop.permute(1, 2, 0).numpy())
+        # # Plot the bounding box
+        # rect = patches.Rectangle(
+        #     (bbox_crop[0, 0], bbox_crop[0, 1]),
+        #     bbox_crop[1, 0] - bbox_crop[0, 0],
+        #     bbox_crop[1, 1] - bbox_crop[0, 1],
+        #     linewidth=1,
+        #     edgecolor="r",
+        #     facecolor="none",
+        # )
+        # plt.gca().add_patch(rect)
+        # plt.show()
+        # exit()
         
         # Set the input data for the prediction module
         input = BatchCLinesInferenceData(
-            rgbs=image_pytorch.permute(2, 0, 1).unsqueeze(0),
+            rgbs=image_pytorch.unsqueeze(0),
             contour_points_list=[
                     # First example of the batch
                     [bbox,],
                     # Second example of the batch...
                 ],
-            clines_rgbs=clines_rgb.permute(2, 0, 1).unsqueeze(0)\
+            clines_rgbs=clines_rgb.unsqueeze(0)\
                 if clines_coordinates is not None else None,
         )
+        #NOTE: commented
         # Resize the input image and the bounding box only
-        input = self._resize_transform(input)
+        # input = self._resize_transform(input)
         
         # Send the input data to the device
         input.rgbs = input.rgbs.to(self._device)
@@ -292,7 +333,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 
                 # Plot the rgb clines
                 _, ax = plt.subplots()
-                ax.imshow(clines_rgb.cpu().numpy())
+                ax.imshow(clines_rgb.permute(1, 2, 0).cpu().numpy())
                 ax.axis("off")
                 plt.tight_layout()
                 
@@ -521,7 +562,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 clines_coordinates=clines_coordinates,
                 clines_segmentation_only=True,
                 context_vectors_prediction_only=False,
-                visualize=False,
+                visualize=True,
             )
             
             # Go through the valid data lines
@@ -609,20 +650,21 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         # Find the bounding box of the contour
         bbox = self.ComputeBoundingBox(view.data_points)
         
+        #NOTE: commented
         # Transform the bounding box coordinates to the probabilistic
         # segmentation image space
-        bbox = self._resize_transform.point_transform(
-            points=bbox,
-            orig_size=self._original_image_size,
-            valid_borders=True,
-        )
+        # bbox = self._resize_transform.point_transform(
+        #     points=bbox,
+        #     orig_size=self._original_image_size,
+        #     valid_borders=True,
+        # )
         
         # Predict the probabilistic segmentation model
         self.compute_probabilistic_segmentation(
             bbox,
             clines_segmentation_only=False,
             context_vectors_prediction_only=True,
-            visualize=False,
+            visualize=True,
         )
 
         return True
