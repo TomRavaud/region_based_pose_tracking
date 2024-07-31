@@ -5,6 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from matplotlib.collections import LineCollection
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 
 # Custom libraries
 import pym3t
@@ -97,6 +100,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
             bbox,
             clines_segmentation_only=False,
             context_vectors_prediction_only=True,
+            visualize=False,
         )
         
         return True
@@ -296,11 +300,6 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 _, ax = plt.subplots()
                 ax.imshow(image_np)
                 
-                
-                from matplotlib.collections import LineCollection
-                import matplotlib.cm as cm
-                import matplotlib.colors as mcolors
-                
                 # Choose a colormap
                 cmap = cm.get_cmap('bwr')
 
@@ -494,7 +493,6 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 ):
                     continue
                 
-                
                 # TODO: to put in a custom structure to avoid copying
                 # Array to store the line pixels coordinates
                 line_pixels_coordinates = np.zeros(
@@ -624,6 +622,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
             bbox,
             clines_segmentation_only=False,
             context_vectors_prediction_only=True,
+            visualize=False,
         )
 
         return True

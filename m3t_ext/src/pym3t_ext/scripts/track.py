@@ -136,15 +136,18 @@ def track(config: omegaconf.DictConfig) -> int:
     
     # TODO: parameter in config file
     use_region_checking = True
+    # Region checking consists in discarding lines crossing more than 1 time
+    # the frontier between the two regions
     if use_region_checking:
         silhouette_renderer = pym3t.FocusedSilhouetteRenderer(
-            name=f"{config.model}_focused_silhouette_renderer",
+            name=f"{config.model}_silhouette_renderer",
             renderer_geometry=renderer_geometry,
-            camera=color_camera,
+            world2camera_pose=pym3t.Transform3fA(np.eye(4, dtype=np.float32)),
+            intrinsics=intrinsics,
         )
         silhouette_renderer.AddReferencedBody(body)
         region_modality.UseRegionChecking(silhouette_renderer)
-
+    
     # RBOT specific parameters (see Stoiber PhD thesis)
     region_modality.function_amplitude = 0.36
     region_modality.function_slope = 0.0
@@ -204,7 +207,7 @@ def track(config: omegaconf.DictConfig) -> int:
     # Start tracking
     if not tracker.SetUp():
         return -1
-
+    
     if not tracker.run_tracker_process(
         model=config.model,
         scene=config.scene,

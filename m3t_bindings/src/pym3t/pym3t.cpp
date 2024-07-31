@@ -446,9 +446,11 @@ NB_MODULE(_pym3t_mod, m){
     // FocusedSilhouetteRenderer
     nb::class_<FocusedSilhouetteRenderer, FocusedDepthRenderer>(m, "FocusedSilhouetteRenderer")
         .def(nb::init<const std::string &, const std::shared_ptr<RendererGeometry> &,
-                      const std::shared_ptr<Camera> &, IDType, float, float>(),
-             "name"_a, "renderer_geometry"_a, "camera"_a, "id_type"_a=IDType::REGION,
-             "z_min"_a=0.02f, "z_max"_a=10.0f)
+                      const Transform3fA &, const Intrinsics &, IDType, int, float,
+                      float>(),
+                "name"_a, "renderer_geometry"_a, "world2camera_pose"_a, "intrinsics"_a,
+                "id_type"_a=IDType::REGION, "image_size"_a=200, "z_min"_a=0.02f,
+                "z_max"_a=10.0f)
         .def("IsBodyVisible", &FocusedSilhouetteRenderer::IsBodyVisible)
         .def("FetchSilhouetteImage", &FocusedSilhouetteRenderer::FetchSilhouetteImage)
         ;
