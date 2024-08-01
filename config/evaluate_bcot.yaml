@@ -1,8 +1,5 @@
-dataset_name: rbot
-dataset_dir: data/RBOT
-
-model: ape
-scene: a_regular
+dataset_name: bcot
+dataset_dir: data/BCOT
 
 image_size:
   height: 512
@@ -23,9 +20,17 @@ reset_pose:
       threshold_trans: 5
       threshold_rot: 5
 
-# Number of images (the first image of the sequence is not counted)
-nb_images: 1000
+# Choose the scenes and models to evaluate
+# scenes_models_dict:
+#   easy_static_handheld:
+#     - Ape
+#     - Auto GPS
+#     - Bracket
 
-display_images: true
+# To evaluate all scenes and models, use the following
+scenes_models_dict: all
+
+# Number of images (the first image of the sequence is not counted)
+nb_images_per_sequence: null  # null means all images
 
 log_dir: logs

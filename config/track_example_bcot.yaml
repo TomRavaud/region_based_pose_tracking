@@ -1,8 +1,8 @@
-dataset_name: rbot
-dataset_dir: data/RBOT
+dataset_name: bcot
+dataset_dir: data/BCOT
 
-model: ape
-scene: a_regular
+model: Ape
+scene: easy_static_handheld
 
 image_size:
   height: 512
@@ -24,7 +24,7 @@ reset_pose:
       threshold_rot: 5
 
 # Number of images (the first image of the sequence is not counted)
-nb_images: 1000
+nb_images: null  # null means all images
 
 display_images: true
 

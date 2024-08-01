@@ -146,6 +146,13 @@ class ProbabilisticSegmentationUNet(nn.Module):
 
         # Predict as many context vectors as the number of images in the batch
         self._context_vectors = self._net(input_implicit_segmentation)
+        # if self._context_vectors is None:
+        #     # Predict as many context vectors as the number of images in the batch
+        #     self._context_vectors = self._net(input_implicit_segmentation)
+        # else:
+        #     self._context_vectors =\
+        #         0.2 * self._net(input_implicit_segmentation)\
+        #             + 0.8 * self._context_vectors
         
         
     def forward(

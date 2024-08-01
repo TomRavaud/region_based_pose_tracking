@@ -21,6 +21,7 @@ def track(config: omegaconf.DictConfig) -> int:
 
     Raises:
         ValueError: If the dataset name is not recognized.
+        ValueError: If the modality is not recognized.
     
     Returns:
         int: Return code (0 if successful, -1 otherwise)
@@ -37,6 +38,7 @@ def track(config: omegaconf.DictConfig) -> int:
         name="renderer_geometry",
     )
 
+    # Load camera intrinsics depending on the dataset
     if config.dataset_name == "rbot":
         image_name_pre = config.scene
         n_leading_zeros = 4
@@ -57,9 +59,27 @@ def track(config: omegaconf.DictConfig) -> int:
             "ppv": float(ppv),
             "width": config.image_size.width,
             "height": config.image_size.height,
-        } 
+        }
     elif config.dataset_name == "bcot":
-        raise NotImplementedError("Evaluation for BCOT dataset is not implemented yet.")
+        image_name_pre = ""
+        n_leading_zeros = 4
+        load_directory = Path(config.dataset_dir) / config.scene / config.model
+        
+        # Load camera intrinsics
+        camera_intrinsics_file = Path(config.dataset_dir) / config.scene / "K.txt"
+        with open(camera_intrinsics_file, "r") as f:
+            line = f.readline()
+        # Parse intrinsics
+        K_flat = list(map(float, line[line.find("(")+1:line.find(")")].split(", ")))
+        # Create intrinsics dictionary
+        intrinsics = {
+            "fu": float(K_flat[0]),
+            "fv": float(K_flat[4]),
+            "ppu": float(K_flat[2]),
+            "ppv": float(K_flat[5]),
+            "width": config.image_size.width,
+            "height": config.image_size.height,
+        }
     else:
         raise ValueError(f"Unknown dataset name: {config.dataset_name}")
 
@@ -83,11 +103,13 @@ def track(config: omegaconf.DictConfig) -> int:
     )
     tracker.AddViewer(color_viewer)
     
+    # Get the path to the 3D model depending on the dataset
     if config.dataset_name == "rbot":
         geometry_path =\
             Path(config.dataset_dir) / config.model / f"{config.model}.obj"
     elif config.dataset_name == "bcot":
-        raise NotImplementedError("Evaluation for BCOT dataset is not implemented yet.")
+        geometry_path =\
+            Path(config.dataset_dir) / f"models/{config.model}.obj"
     else:
         raise ValueError(f"Unknown dataset name: {config.dataset_name}")
     
@@ -102,11 +124,14 @@ def track(config: omegaconf.DictConfig) -> int:
     )
     renderer_geometry.AddBody(body)
 
+    # Create a directory to save the region model if it does not exist
+    region_model_dir = Path("tmp") / config.dataset_name
+    region_model_dir.mkdir(parents=True, exist_ok=True)
     # Set up region model
     region_model = pym3t.RegionModel(
         name=f"{config.model}_region_model",
         body=body,
-        model_path=f"tmp/{config.model}_region_model.bin",
+        model_path=f"{region_model_dir}/{config.model}_region_model.bin",
     )
     
     # Set up the modality
@@ -168,6 +193,18 @@ def track(config: omegaconf.DictConfig) -> int:
     )
     tracker.AddOptimizer(optimizer)
     
+    if config.nb_images is None:
+        if config.dataset_name == "rbot":
+            # Constant number of images for the RBOT dataset
+            # (do not take the first image into account)
+            config.nb_images = 1001 - 1
+        elif config.dataset_name == "bcot":
+            # Get the number of images for the current scene/model
+            # (do not take the first image into account)
+            config.nb_images = len(list(Path(load_directory).glob("*.png"))) - 1
+        else:
+            raise ValueError(f"Unknown dataset name: {config.dataset_name}")
+    
     # Load the GT poses (initial pose + poses for each image)
     body2world_poses_gt = np.empty((config.nb_images+1, 4, 4), dtype=np.float32)
     
@@ -190,6 +227,26 @@ def track(config: omegaconf.DictConfig) -> int:
                 pose_components[6:9] + [pose_components[11]*1e-3],
                 [0, 0, 0, 1],
             ]
+    elif config.dataset_name == "bcot":
+        # Load the initial body2world GT pose
+        poses_file = Path(config.dataset_dir) / config.scene / config.model / "pose.txt"
+        
+        with open(poses_file, "r") as f:
+            lines = f.readlines()
+        
+        for i in range(body2world_poses_gt.shape[0]):
+            
+            # Parse the pose components
+            pose_components = list(map(float, lines[i].strip("\t\n").split("\t")))
+            # Create the homogenous transformation matrix as a list of lists
+            body2world_poses_gt[i] = [
+                pose_components[:3] + [pose_components[9]*1e-3],
+                pose_components[3:6] + [pose_components[10]*1e-3],
+                pose_components[6:9] + [pose_components[11]*1e-3],
+                [0, 0, 0, 1],
+            ]
+    else:
+        raise ValueError(f"Unknown dataset name: {config.dataset_name}")
     
     # Create the initial body2world pose object
     body2world_pose = pym3t.Transform3fA(
@@ -227,7 +284,7 @@ def track(config: omegaconf.DictConfig) -> int:
 
 if __name__ == "__main__":
     # Configuration file path
-    config_path = Path("config/track_example_rbot.yaml")
+    config_path = Path("config/track_example_bcot.yaml")
 
     # Read config file
     config = omegaconf.OmegaConf.load(config_path)

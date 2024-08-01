@@ -6,7 +6,7 @@ import datetime
 import omegaconf
 
 # Custom modules and libraries
-import pym3t_ext.toolbox.evaluation.functions as eval
+import pym3t_ext.toolbox.utils.scenes_models as scenes_models
 from pym3t_ext.scripts.track import track
 
 
@@ -18,7 +18,7 @@ def evaluate(config: omegaconf.DictConfig) -> None:
     """
     if "scenes_models_dict" in config:
         if config.scenes_models_dict == "all":
-            scenes_models_dict = eval.load_all_scenes_models(
+            scenes_models_dict = scenes_models.load_all_scenes_models(
                 dataset_name=config.dataset_name,
                 dataset_dir=Path(config.dataset_dir),
             )
@@ -58,7 +58,7 @@ def evaluate(config: omegaconf.DictConfig) -> None:
 
 if __name__ == "__main__":
     # Configuration file path
-    config_path = Path("config/evaluate_rbot.yaml")
+    config_path = Path("config/evaluate_bcot.yaml")
 
     # Read config file
     config = omegaconf.OmegaConf.load(config_path)

@@ -91,11 +91,11 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         #NOTE: commented
         # Transform the bounding box coordinates to the probabilistic
         # segmentation image space
-        # bbox = self._resize_transform.point_transform(
-        #     points=bbox,
-        #     orig_size=self._original_image_size,
-        #     valid_borders=True,
-        # )
+        bbox = self._resize_transform.point_transform(
+            points=bbox,
+            orig_size=self._original_image_size,
+            valid_borders=True,
+        )
         
         # Predict the probabilistic segmentation model (context vectors only)
         self.compute_probabilistic_segmentation(
@@ -241,13 +241,13 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         if clines_coordinates is not None:
             clines_rgb = torch.from_numpy(clines_rgb).permute(2, 0, 1)
         
-        if bbox is not None:
-            # Crop and resize the image and the bounding box
-            crop_object_transform = CropObjectTransform(
-                resize=self._segmentation_size,
-                scale_factor=0.8,
-            )
-            image_pytorch, bbox = crop_object_transform(image_pytorch, bbox)
+        # if bbox is not None:
+        #     # Crop and resize the image and the bounding box
+        #     crop_object_transform = CropObjectTransform(
+        #         resize=self._segmentation_size,
+        #         scale_factor=0.8,
+        #     )
+        #     image_pytorch, bbox = crop_object_transform(image_pytorch, bbox)
         
         
         #TODO: to remove
@@ -292,7 +292,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         )
         #NOTE: commented
         # Resize the input image and the bounding box only
-        # input = self._resize_transform(input)
+        input = self._resize_transform(input)
         
         # Send the input data to the device
         input.rgbs = input.rgbs.to(self._device)
@@ -653,11 +653,11 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         #NOTE: commented
         # Transform the bounding box coordinates to the probabilistic
         # segmentation image space
-        # bbox = self._resize_transform.point_transform(
-        #     points=bbox,
-        #     orig_size=self._original_image_size,
-        #     valid_borders=True,
-        # )
+        bbox = self._resize_transform.point_transform(
+            points=bbox,
+            orig_size=self._original_image_size,
+            valid_borders=True,
+        )
         
         # Predict the probabilistic segmentation model
         self.compute_probabilistic_segmentation(
@@ -666,5 +666,5 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
             context_vectors_prediction_only=True,
             visualize=True,
         )
-
+        
         return True
