@@ -19,7 +19,7 @@ modality: deep_clines_region_modality
 reset_pose:
   do_reset: true
   criterion:
-    cm_degree_score:
+    CmDegreeScore:
       threshold_trans: 5
       threshold_rot: 5
 

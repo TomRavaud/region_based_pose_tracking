@@ -2,7 +2,7 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
-// NOTE:
+// OpenCV
 #include <opencv2/core.hpp>
 
 // Other
@@ -462,7 +462,6 @@ NB_MODULE(_pym3t_mod, m){
             if (mat.type() == CV_8UC3) {
                 size_t shape[3] = {mat.rows, mat.cols, mat.channels()};
 
-                //TODO: make a copy in image getter (LoaderColorCamera), nb::rv_policy::copy to work with capsule?
                 return nb::ndarray<nb::numpy, uint8_t, nb::shape<-1, -1, 3>>(
                     mat.data, 3, shape, nb::capsule());
                 

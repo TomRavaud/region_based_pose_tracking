@@ -1,16 +1,14 @@
 # Standard libraries
 from pathlib import Path
-from functools import partial
 
 # Third-party libraries
 import omegaconf
 import numpy as np
 from tabulate import tabulate
+from tqdm import tqdm
 
 # Custom modules
-from pym3t_ext.toolbox.geometry.metrics import (
-    cm_degree_score,
-)
+import pym3t_ext.toolbox.geometry.metrics as custom_metrics
 
 
 def poses_txt_to_np(file_path: Path, scale_trans: float = 1.0) -> np.ndarray:
@@ -109,35 +107,83 @@ def compute_metrics(config: omegaconf.DictConfig) -> None:
     # Get the metrics to compute and set their parameters
     metrics = {}
     for metric in config.metrics:
-        metric_type = list(metric.keys())[0]
-        metric_name = metric[metric_type]["name"] if "name" in metric[metric_type]\
-            else metric_type
         
-        if metric_type == "cm_degree_score":
-            metrics[metric_name] = partial(
-                cm_degree_score,
-                threshold_trans=metric[metric_type]["threshold_trans"],
-                threshold_rot=metric[metric_type]["threshold_rot"],
-            )
-        else:
-            raise ValueError(f"Unknown metric: {metric_type}")
+        metric_class_name = list(metric.keys())[0]
+        # Get the metric class
+        try:
+            metric_class = getattr(custom_metrics, metric_class_name)
+        except AttributeError:
+            print(f"Unknown metric: {metric_class_name}")
+            continue
+        # Skip the vertices metric (the 3D model files will be provided
+        # when going through the models)
+        if issubclass(metric_class, custom_metrics.VerticesMetric):
+            continue
+        # Instantiate the metric by passing the parameters
+        try:
+            my_metric = metric_class(**metric[metric_class_name])
+        except TypeError as e:
+            print(f"Error instantiating metric {metric_class_name}: {e}")
+            continue
+        # Add the metric to the dictionary
+        metrics[my_metric.name] = my_metric
     
     # Create dictionaries to store the results per scene
-    scores_dicts = [{} for _ in range(len(metrics))]
+    scores_dicts = [{} for _ in range(len(config.metrics))]
     
     # Get the log files paths
     experiment_dir = Path(config.log_dir) / config.experiment_name
     log_files = sorted(experiment_dir.glob("*.txt"))
+
+    for log_file in tqdm(log_files):
     
-    for log_file in log_files:
-        
-        # Lists to store the results for each frame before averaging
-        scores_lists = [[] for _ in range(len(metrics))]
-        
         # Get the model and scene names
         if config.dataset_name in ["rbot", "bcot"]:
             model = log_file.stem.split("_")[1]
             scene = "_".join(log_file.stem.split("_")[2:])
+        
+        # Eventually add metrics depending on the model/scene
+        for metric in config.metrics:
+            metric_class_name = list(metric.keys())[0]
+            metric_class = getattr(custom_metrics, metric_class_name)
+            
+            if issubclass(metric_class, custom_metrics.VerticesMetric):
+                
+                # Get the path to the model file
+                if config.dataset_name == "rbot":
+                    model_file =\
+                        Path(config.dataset_dir) / model / f"{model}.obj"
+                elif config.dataset_name == "bcot":
+                    model_file =\
+                        Path(config.dataset_dir) / "models" / f"{model}.obj"
+                else:
+                    raise ValueError(f"Unknown dataset: {config.dataset_name}")
+                # Create a dictionary with the parameters used to identify
+                # uniquely the metric
+                tmp_params = metric[metric_class_name]
+                tmp_params["model_file"] = model_file
+                
+                # Check if the metric associated to the model is already in the
+                # metrics dictionary
+                is_metric_in_dict = False
+                for m in metrics.values():
+                    if isinstance(m, metric_class):
+                        if m.parameters == tmp_params:
+                            is_metric_in_dict = True
+                            break
+                # If not, add it
+                if not is_metric_in_dict:
+                    # Instantiate the metric by passing the parameters
+                    try:
+                        my_metric = metric_class(**tmp_params)
+                    except TypeError as e:
+                        print(f"Error instantiating metric {metric_class_name}: {e}")
+                        continue
+                    # Add/update the metric in the metrics dictionary
+                    metrics[my_metric.name] = my_metric
+        
+        # Lists to store the results for each frame before averaging
+        scores_lists = [[] for _ in range(len(metrics))]
         
         # Read the poses
         poses_est = poses_txt_to_np(log_file)
@@ -152,12 +198,12 @@ def compute_metrics(config: omegaconf.DictConfig) -> None:
             for i, metric in enumerate(metrics.values()):
                 scores_lists[i].append(metric(T_gt, T_est))
         
-        # Add the score associated to scene s and object o to the data dictionary
         if scene not in scores_dicts[0]:
             # Create an empty dictionary for the scene s for each metric
             for scores_dict in scores_dicts:
                 scores_dict[scene] = {}
 
+        # Add the score associated to the scene and model to the data dictionary
         for scores_dict, scores_list in zip(scores_dicts, scores_lists):
             scores_dict[scene][model] = np.mean(scores_list)
             

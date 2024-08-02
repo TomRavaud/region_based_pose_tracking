@@ -10,9 +10,7 @@ from tqdm import tqdm
 
 # Custom libraries
 import pym3t
-from pym3t_ext.toolbox.geometry.metrics import (
-    cm_degree_score,
-)
+import pym3t_ext.toolbox.geometry.metrics as custom_metrics
 
 
 class PyTracker(pym3t.Tracker):
@@ -98,6 +96,25 @@ class PyTracker(pym3t.Tracker):
                         f"{pose_gt[2, 0]}\t{pose_gt[2, 1]}\t{pose_gt[2, 2]}\t"
                         f"{pose_gt[0, 3]}\t{pose_gt[1, 3]}\t{pose_gt[2, 3]}\n"
                     )
+        
+        # Define the metric
+        if reset_pose is not None and reset_pose.do_reset:
+            is_metric_defined = False
+            criterion = reset_pose.criterion
+            metric_class_name = list(criterion.keys())[0]
+            # Get the metric class
+            try:
+                metric_class = getattr(custom_metrics, metric_class_name)
+            except AttributeError:
+                print(f"Unknown metric: {metric_class_name}")
+            # Instantiate the metric by passing the parameters
+            try:
+                my_metric = metric_class(**criterion[metric_class_name])
+            except TypeError as e:
+                print(f"Error instantiating metric {metric_class_name}: {e}")
+            else:
+                is_metric_defined = True
+        
         
         # Tracking process
         for i in tqdm(range(nb_images)):
@@ -189,21 +206,12 @@ class PyTracker(pym3t.Tracker):
                 pose_gt = body2world_poses_gt[i+1]
                 
                 # Reset the body2world pose to the GT pose if the tracking is lost
-                if reset_pose is not None and reset_pose.do_reset:
+                if reset_pose is not None\
+                    and reset_pose.do_reset\
+                        and is_metric_defined:
                     
-                    criterion = reset_pose.criterion
-                    
-                    if list(criterion.keys())[0] == "cm_degree_score":
-                        success = cm_degree_score(
-                            T_gt=pose_gt,
-                            T_est=pose_refined,
-                            threshold_trans=\
-                                criterion["cm_degree_score"]["threshold_trans"],
-                            threshold_rot=\
-                                criterion["cm_degree_score"]["threshold_rot"],
-                        )
-                    else:
-                        raise ValueError(f"Unknown criterion: {criterion}")
+                    # Compute the metric
+                    success = my_metric(T_gt=pose_gt, T_est=pose_refined)
                     
                     # Tracking is lost
                     if not success:
