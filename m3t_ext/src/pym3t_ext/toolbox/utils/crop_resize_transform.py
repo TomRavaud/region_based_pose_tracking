@@ -1,14 +1,10 @@
 # Standard libraries
-import random
+from typing import Tuple
 
 # Third-party libraries
 import numpy as np
-from torchvision.transforms.functional import crop, resize
-
-# Custom modules
-from pym3t_ext.toolbox.modules.object_segmentation_prediction_module import (
-    BatchInferenceData,
-)
+import torchvision.transforms.functional as F
+import torch
 
 
 class CropResizeToAspectTransform:
@@ -34,27 +30,27 @@ class CropResizeToAspectTransform:
         
         self._resize = resize
         self._aspect = max(resize) / min(resize)
-        
-    def _transform(self, batch: BatchInferenceData) -> BatchInferenceData:
-        """Crop and resize the RGB observations to a target aspect ratio.
+    
+    def __call__(
+        self,
+        image: torch.Tensor,
+        bbox: np.ndarray,
+    ) -> Tuple[torch.Tensor, np.ndarray]:
+        """Crop and resize the image and bounding box to a target aspect ratio.
 
         Args:
-            batch (BatchInferenceData): Batch of data.
-
-        Raises:
-            ValueError: If the RGB images are None.
+            image (torch.Tensor): Image to crop and resize.
+            bbox (np.ndarray): Bounding box coordinates. Shape (2, 2).
 
         Returns:
-            BatchInferenceData: Transformed batch of data.
+            Tuple[torch.Tensor, np.ndarray]: Cropped and resized image and
+                bounding box.
         """
-        if batch.rgbs is None:
-            raise ValueError("The RGB images are None.")
-        
-        h, w = batch.rgbs.shape[2:4]
+        h, w = image.shape[1:3]
 
         # Skip if the image is already at the target size
         if (h, w) == self._resize:
-            return batch
+            return image, bbox
 
         # Match the width on input image with an image of target aspect ratio.
         if not np.isclose(w / h, self._aspect):
@@ -69,37 +65,30 @@ class CropResizeToAspectTransform:
                 x0 + crop_w / 2,
                 y0 + crop_h / 2,
             )
-            box = (x1, y1, x2, y2)
-            box = [int(b) for b in box]
+            x1, y1, x2, y2 = tuple(map(int, (x1, y1, x2, y2)))
             
             # Crop the RGB images
-            rgbs = crop(batch.rgbs, box[1], box[0], box[3] - box[1], box[2] - box[0])
-        
+            crop = image[:, y1:y2, x1:x2]
         else:
-            rgbs = batch.rgbs
+            crop = image
         
-        w_resize, h_resize = max(self._resize), min(self._resize)
-        rgbs = resize(rgbs, (h_resize, w_resize), antialias=True)
+        # Resize the crop
+        crop = F.resize(crop, self._resize, antialias=True)
         
-        # Update the RGB images
-        batch.rgbs = rgbs
+        # Compute the new bounding box coordinates
+        x_bbox_1, y_bbox_1 = bbox[0]
+        x_bbox_2, y_bbox_2 = bbox[1]
+        x_bbox_1_new, y_bbox_1_new = x_bbox_1 - x1, y_bbox_1 - y1
+        x_bbox_2_new, y_bbox_2_new = x_bbox_2 - x1, y_bbox_2 - y1
+        new_bbox = np.array([
+            [x_bbox_1_new, y_bbox_1_new],
+            [x_bbox_2_new, y_bbox_2_new],
+        ])
+        # Resizing
+        new_bbox = new_bbox * (self._resize[1] / crop_w)
         
-        return batch
-    
-    def __call__(self, seq: BatchInferenceData) -> BatchInferenceData:
-        """Apply or not the transformation to the observation given the
-        probability `p`.
-
-        Args:
-            seq (SequenceSegmentationData): Sequence observation.
-
-        Returns:
-            SequenceSegmentationData: Transformed sequence observation.
-        """
-        if random.random() <= self._p:
-            return self._transform(seq)
-        else:
-            return seq
+        return crop, new_bbox
+        
     
     def point_transform(
         self,
@@ -166,6 +155,102 @@ class CropResizeToAspectTransform:
                 "The case where the target aspect ratio is smaller than the "
                 "original aspect ratio is not implemented."
             )
+
+
+class CropResizeToObjectTransform:
+    
+    def __init__(
+        self,
+        resize: tuple = (480, 640),
+        scale_factor: float = 1.5,
+    ) -> None:
+        """Constructor.
+
+        Args:
+            resize (Resolution, optional): Target aspect ratio (height, width).
+                Defaults to (480, 640).
+            scale_factor (float, optional): Scale factor to expand the bounding box.
+                Defaults to 1.5.
+
+        Raises:
+            ValueError: If the width is less than the height.
+        """
+        if resize[1] < resize[0]:
+            raise ValueError("The width must be greater than the height.")
+        
+        self._resize = resize
+        self._aspect = max(resize) / min(resize)
+        self._scale_factor = scale_factor
+        
+    def __call__(
+        self,
+        image: torch.Tensor,
+        bbox: np.ndarray,
+    ) -> Tuple[torch.Tensor, np.ndarray]:
+        """Crop and resize an image around a bounding box.
+
+        Args:
+            image (torch.Tensor): Image to crop and resize.
+            bbox (np.ndarray): Bounding box coordinates. Shape (2, 2).
+
+        Returns:
+            Tuple[torch.Tensor, np.ndarray]: Cropped and resized image and bounding box.
+        """
+        h, w = image.shape[1:3]
+        
+        x_bbox_1, y_bbox_1 = bbox[0]
+        x_bbox_2, y_bbox_2 = bbox[1]
+
+        # Compute the size and center of the bounding box
+        bbox_w, bbox_h = x_bbox_2 - x_bbox_1, y_bbox_2 - y_bbox_1
+        x_center, y_center = (x_bbox_1 + x_bbox_2) / 2, (y_bbox_1 + y_bbox_2) / 2
+
+        # Expand the bounding box by the scale factor
+        bbox_w, bbox_h = bbox_w * self._scale_factor, bbox_h * self._scale_factor
+
+        # Ensure the box has the correct aspect ratio
+        if bbox_w / bbox_h > self._aspect:
+            bbox_h = bbox_w / self._aspect
+        else:
+            bbox_w = bbox_h * self._aspect
+
+        # Update the box coordinates
+        x1, y1, x2, y2 = (
+            x_center - bbox_w / 2,
+            y_center - bbox_h / 2,
+            x_center + bbox_w / 2,
+            y_center + bbox_h / 2,
+        )
+
+        # Ensure the box is within image bounds; if not, shift it
+        if x1 < 0:
+            x1, x2 = 0, bbox_w
+        if y1 < 0:
+            y1, y2 = 0, bbox_h
+        if x2 > w:
+            x1, x2 = w - bbox_w, w
+        if y2 > h:
+            y1, y2 = h - bbox_h, h
+
+        x1, y1, x2, y2 = tuple(map(int, (x1, y1, x2, y2)))
+
+        # Extract the crop
+        crop = image[:, y1:y2, x1:x2]
+        
+        # Resize the crop
+        crop = F.resize(crop, self._resize, antialias=True)
+        
+        # Compute the new bounding box coordinates
+        x_bbox_1_new, y_bbox_1_new = x_bbox_1 - x1, y_bbox_1 - y1
+        x_bbox_2_new, y_bbox_2_new = x_bbox_2 - x1, y_bbox_2 - y1
+        new_bbox = np.array([
+            [x_bbox_1_new, y_bbox_1_new],
+            [x_bbox_2_new, y_bbox_2_new],
+        ])
+        # Resizing
+        new_bbox = new_bbox * (self._resize[1] / bbox_w)
+        
+        return crop, new_bbox
 
 
 if __name__ == "__main__":

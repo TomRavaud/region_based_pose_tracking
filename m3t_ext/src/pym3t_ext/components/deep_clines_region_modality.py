@@ -20,8 +20,10 @@ from pym3t_ext.toolbox.modules.probabilistic_segmentation_unet import (
 )
 from pym3t_ext.toolbox.modules.simple_resnet_module import SimpleResNet
 from pym3t_ext.toolbox.modules.unet_1d_filmed_module import UNet1d
-from pym3t_ext.toolbox.utils.crop_resize_transform import CropResizeToAspectTransform
-from pym3t_ext.toolbox.utils.crop_object_transform import CropObjectTransform
+from pym3t_ext.toolbox.utils.crop_resize_transform import (
+    CropResizeToAspectTransform,
+    CropResizeToObjectTransform,
+)
 
 
 class DeepCLinesRegionModality(pym3t.RegionModalityBase):
@@ -33,9 +35,13 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
     
     # Model trained on 320x240 images
     _segmentation_size = (240, 320)
-    _resize_transform = CropResizeToAspectTransform(
+    _crop_resize_transform = CropResizeToAspectTransform(
         resize=_segmentation_size,
     )
+    # _crop_resize_transform = CropResizeToObjectTransform(
+    #     resize=_segmentation_size,
+    #     scale_factor=2.,
+    # )
     
     # RBOT images are 640x512
     _original_image_size = (512, 640)
@@ -87,15 +93,6 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         
         # Find the bounding box of the contour
         bbox = self.ComputeBoundingBox(view.data_points)
-        
-        #NOTE: commented
-        # Transform the bounding box coordinates to the probabilistic
-        # segmentation image space
-        bbox = self._resize_transform.point_transform(
-            points=bbox,
-            orig_size=self._original_image_size,
-            valid_borders=True,
-        )
         
         # Predict the probabilistic segmentation model (context vectors only)
         self.compute_probabilistic_segmentation(
@@ -231,9 +228,9 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
             ]
             
             # Pad the correspondence lines
-            clines_rgb[:, :self.delta] = clines_rgb[:, self.delta, None]
-            clines_rgb[:, self.delta+self.line_length:] = clines_rgb[
-                :, self.delta+self.line_length-1, None
+            clines_rgb[:, :self.d_pad] = clines_rgb[:, self.d_pad, None]
+            clines_rgb[:, self.d_pad+self.line_length:] = clines_rgb[
+                :, self.d_pad+self.line_length-1, None
             ]
         
         # PyTorch conversion
@@ -241,43 +238,10 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         if clines_coordinates is not None:
             clines_rgb = torch.from_numpy(clines_rgb).permute(2, 0, 1)
         
-        # if bbox is not None:
-        #     # Crop and resize the image and the bounding box
-        #     crop_object_transform = CropObjectTransform(
-        #         resize=self._segmentation_size,
-        #         scale_factor=0.8,
-        #     )
-        #     image_pytorch, bbox = crop_object_transform(image_pytorch, bbox)
+        if bbox is not None:
+            # Crop and resize the image and the bounding box 
+            image_pytorch, bbox = self._crop_resize_transform(image_pytorch, bbox)
         
-        
-        #TODO: to remove
-        # plt.figure()
-        # plt.subplot(1, 2, 1)
-        # plt.imshow(image.permute(1, 2, 0).numpy())
-        # # Plot the bounding box
-        # rect = patches.Rectangle(
-        #     (bbox[0, 0], bbox[0, 1]),
-        #     bbox[1, 0] - bbox[0, 0],
-        #     bbox[1, 1] - bbox[0, 1],
-        #     linewidth=1,
-        #     edgecolor="r",
-        #     facecolor="none",
-        # )
-        # plt.gca().add_patch(rect)
-        # plt.subplot(1, 2, 2)
-        # plt.imshow(crop.permute(1, 2, 0).numpy())
-        # # Plot the bounding box
-        # rect = patches.Rectangle(
-        #     (bbox_crop[0, 0], bbox_crop[0, 1]),
-        #     bbox_crop[1, 0] - bbox_crop[0, 0],
-        #     bbox_crop[1, 1] - bbox_crop[0, 1],
-        #     linewidth=1,
-        #     edgecolor="r",
-        #     facecolor="none",
-        # )
-        # plt.gca().add_patch(rect)
-        # plt.show()
-        # exit()
         
         # Set the input data for the prediction module
         input = BatchCLinesInferenceData(
@@ -290,9 +254,6 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
             clines_rgbs=clines_rgb.unsqueeze(0)\
                 if clines_coordinates is not None else None,
         )
-        #NOTE: commented
-        # Resize the input image and the bounding box only
-        input = self._resize_transform(input)
         
         # Send the input data to the device
         input.rgbs = input.rgbs.to(self._device)
@@ -401,7 +362,6 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 
                 plt.show()
                 
-            
             return
         
         else:
@@ -490,7 +450,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
             )
         
         # Value used to pad the correspondence lines
-        self.delta = (self._clines_max_length - self.line_length) // 2
+        self.d_pad = (self._clines_max_length - self.line_length) // 2
         
         # Differentiate cases with and without occlusion handling:
         # A. If occlusion handling is enabled:
@@ -535,6 +495,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                     continue
                 
                 # TODO: to put in a custom structure to avoid copying
+                # (cf nanobind exchanging information doc)
                 # Array to store the line pixels coordinates
                 line_pixels_coordinates = np.zeros(
                     (self.line_length, 2),
@@ -550,7 +511,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                     continue
                 
                 # Set the line pixels coordinates
-                clines_coordinates[i, self.delta:self.delta+self.line_length, :] =\
+                clines_coordinates[i, self.d_pad:self.d_pad+self.line_length, :] =\
                     line_pixels_coordinates
                 
                 valid_lines_indices.append(i)
@@ -562,7 +523,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 clines_coordinates=clines_coordinates,
                 clines_segmentation_only=True,
                 context_vectors_prediction_only=False,
-                visualize=True,
+                visualize=False,
             )
             
             # Go through the valid data lines
@@ -572,7 +533,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 # pixel of the current line
                 line_pixels_probabilities_f = clines_probabilities_f[
                     i,
-                    self.delta:self.delta+self.line_length,
+                    self.d_pad:self.d_pad+self.line_length,
                 ]
                 line_pixels_probabilities_b = 1 - line_pixels_probabilities_f
                 
@@ -649,15 +610,6 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         
         # Find the bounding box of the contour
         bbox = self.ComputeBoundingBox(view.data_points)
-        
-        #NOTE: commented
-        # Transform the bounding box coordinates to the probabilistic
-        # segmentation image space
-        bbox = self._resize_transform.point_transform(
-            points=bbox,
-            orig_size=self._original_image_size,
-            valid_borders=True,
-        )
         
         # Predict the probabilistic segmentation model
         self.compute_probabilistic_segmentation(

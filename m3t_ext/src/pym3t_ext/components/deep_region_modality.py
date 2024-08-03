@@ -32,7 +32,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
     
     # Model trained on 320x240 images
     _segmentation_size = (240, 320)
-    _resize_transform = CropResizeToAspectTransform(
+    _crop_resize_transform = CropResizeToAspectTransform(
         resize=_segmentation_size,
     )
     _resize_probabilistic_map = False
@@ -86,7 +86,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
             
         # Transform the bounding box coordinates to the probabilistic
         # segmentation image space
-        bbox = self._resize_transform.point_transform(
+        bbox = self._crop_resize_transform.point_transform(
             points=bbox,
             orig_size=self._original_image_size,
             valid_borders=True,
@@ -107,7 +107,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         """
         # Load pre-trained weights
         train_module_state_dict = torch.load(
-            "weights/probabilistic_segmentation.ckpt"
+            "weights/probabilistic_segmentation_2.ckpt"
         ).get("state_dict")
         
         SimpleResNet34 = partialclass(
@@ -216,7 +216,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         
         if resize:
             # Resize the input data
-            input = self._resize_transform(input)
+            input = self._crop_resize_transform(input)
         
         # Send the input data to the device
         input.rgbs = input.rgbs.to(self._device)
@@ -415,7 +415,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 if self._resize_probabilistic_map:
                     # Transform the coordinates to the probabilistic segmentation image
                     # space
-                    line_pixels_coordinates = self._resize_transform.point_transform(
+                    line_pixels_coordinates = self._crop_resize_transform.point_transform(
                         points=line_pixels_coordinates,
                         orig_size=self._original_image_size,
                     )
@@ -527,7 +527,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
             
         # Transform the bounding box coordinates to the probabilistic
         # segmentation image space
-        bbox = self._resize_transform.point_transform(
+        bbox = self._crop_resize_transform.point_transform(
             points=bbox,
             orig_size=self._original_image_size,
             valid_borders=True,
