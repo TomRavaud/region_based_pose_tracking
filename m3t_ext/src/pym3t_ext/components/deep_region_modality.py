@@ -35,7 +35,6 @@ class DeepRegionModality(pym3t.RegionModalityBase):
     _crop_resize_transform = CropResizeToAspectTransform(
         resize=_segmentation_size,
     )
-    _resize_probabilistic_map = False
     
     # RBOT images are 640x512
     _original_image_size = (512, 640)
@@ -83,20 +82,13 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         
         # Find the bounding box of the contour
         bbox = self.ComputeBoundingBox(view.data_points)
-            
-        # Transform the bounding box coordinates to the probabilistic
-        # segmentation image space
-        bbox = self._crop_resize_transform.point_transform(
-            points=bbox,
-            orig_size=self._original_image_size,
-            valid_borders=True,
-        )
         
         # Predict the probabilistic segmentation model
         self.compute_probabilistic_segmentation(
             bbox,
             pixel_segmentation_only=False,
             mlp_parameters_prediction_only=True,
+            visualize=True,
         )
         
         return True
@@ -174,7 +166,6 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         pixel_segmentation_only: bool = False,
         mlp_parameters_prediction_only: bool = False,
         visualize: bool = False,
-        resize: bool = True,
     ) -> None:
         """Compute the probabilistic segmentation of the image, or the MLP parameters
         only.
@@ -187,6 +178,8 @@ class DeepRegionModality(pym3t.RegionModalityBase):
             mlp_parameters_prediction_only (bool, optional): Whether to predict the
                 MLP parameters only, without outputting the pixel segmentation.
                 Defaults to False.
+            visualize (bool, optional): Whether to visualize the results. Defaults to
+                False.
 
         Raises:
             ValueError: If pixel_segmentation_only and mlp_parameters_prediction_only
@@ -202,21 +195,22 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         image_np = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
         
         # PyTorch conversion
-        image_pytorch = torch.from_numpy(image_np)
+        image_pytorch = torch.from_numpy(image_np).permute(2, 0, 1)
+        
+        if bbox is not None:
+            # Crop and resize the image and the bounding box
+            image_pytorch, bbox = self._crop_resize_transform(image_pytorch, bbox)
+        
         
         # Set the input data for the prediction module
         input = BatchInferenceData(
-            rgbs=image_pytorch.permute(2, 0, 1).unsqueeze(0),
+            rgbs=image_pytorch.unsqueeze(0),
             contour_points_list=[
                     # First example of the batch
                     [bbox,],
                     # Second example of the batch...
                 ],
         )
-        
-        if resize:
-            # Resize the input data
-            input = self._crop_resize_transform(input)
         
         # Send the input data to the device
         input.rgbs = input.rgbs.to(self._device)
@@ -235,7 +229,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 mlp_parameters_prediction_only=False,
             )
             # Convert the first predicted probabilistic mask to numpy
-            self._predicted_probabilistic_mask =\
+            predicted_probabilistic_mask =\
                 predicted_probabilistic_masks[0].cpu().numpy()
             
             if visualize:
@@ -245,13 +239,16 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 cax = divider.append_axes("right", size="5%", pad=0.05)
 
                 # Get the image to set the color scale
-                img = ax.imshow(self._predicted_probabilistic_mask, cmap="magma")
+                img = ax.imshow(predicted_probabilistic_mask, cmap="bwr")
                 ax.axis("off")
 
                 # Colorbar
-                fig.colorbar(img, cmap="magma", cax=cax)
+                fig.colorbar(img, cmap="bwr", cax=cax)
 
                 plt.tight_layout()
+                plt.show()
+            
+            return predicted_probabilistic_mask
         
         elif mlp_parameters_prediction_only:
             self._prediction_module(
@@ -275,6 +272,9 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 ax.add_patch(rect)
                 ax.axis("off")
                 plt.tight_layout()
+                plt.show()
+                
+            return
         
         else:
             predicted_probabilistic_masks = self._prediction_module(
@@ -283,11 +283,11 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 mlp_parameters_prediction_only=False,
             )
             # Convert the first predicted probabilistic mask to numpy
-            self._predicted_probabilistic_mask =\
+            predicted_probabilistic_mask =\
                 predicted_probabilistic_masks[0].cpu().numpy()
+            
+            return predicted_probabilistic_mask
         
-        if visualize:
-            plt.show()
 
     def calculate_correspondences(self, iteration: int, corr_iteration: int) -> bool:
         """Calculate the correspondence lines data (center, normal, segment
@@ -356,12 +356,13 @@ class DeepRegionModality(pym3t.RegionModalityBase):
             
             # Predict the probabilistic segmentation mask using the
             # already computed MLP parameters
-            self.compute_probabilistic_segmentation(
-                bbox=None,
-                pixel_segmentation_only=True,
-                mlp_parameters_prediction_only=False,
-                resize=self._resize_probabilistic_map,
-            )
+            self._predicted_probabilistic_mask =\
+                self.compute_probabilistic_segmentation(
+                    bbox=None,
+                    pixel_segmentation_only=True,
+                    mlp_parameters_prediction_only=False,
+                    visualize=True
+                )
         
         # Differentiate cases with and without occlusion handling:
         # A. If occlusion handling is enabled:
@@ -411,36 +412,6 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 )
                 if not result:
                     continue
-                
-                if self._resize_probabilistic_map:
-                    # Transform the coordinates to the probabilistic segmentation image
-                    # space
-                    line_pixels_coordinates = self._crop_resize_transform.point_transform(
-                        points=line_pixels_coordinates,
-                        orig_size=self._original_image_size,
-                    )
-
-                    # Discard lines that cross the cropped area here (because of the
-                    # resizing)
-                    min_x = min(
-                        line_pixels_coordinates[0, 0],
-                        line_pixels_coordinates[-1, 0]
-                    )
-                    max_x = max(
-                        line_pixels_coordinates[0, 0],
-                        line_pixels_coordinates[-1, 0]
-                    )
-                    min_y = min(
-                        line_pixels_coordinates[0, 1],
-                        line_pixels_coordinates[-1, 1]
-                    )
-                    max_y = max(
-                        line_pixels_coordinates[0, 1],
-                        line_pixels_coordinates[-1, 1]
-                    )
-                    if min_x < 0 or min_y < 0 or max_x >= self._segmentation_size[1]\
-                        or max_y >= self._segmentation_size[0]:
-                        continue
                 
                 # Compute the probabilistic segmentations (P(mf|y) and P(mb|y)) of
                 # each pixel of the line using the probabilistic segmentation mask
@@ -524,20 +495,13 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         
         # Find the bounding box of the contour
         bbox = self.ComputeBoundingBox(view.data_points)
-            
-        # Transform the bounding box coordinates to the probabilistic
-        # segmentation image space
-        bbox = self._crop_resize_transform.point_transform(
-            points=bbox,
-            orig_size=self._original_image_size,
-            valid_borders=True,
-        )
         
         # Predict the probabilistic segmentation model
         self.compute_probabilistic_segmentation(
             bbox,
             pixel_segmentation_only=False,
             mlp_parameters_prediction_only=True,
+            visualize=True
         )
 
         return True
