@@ -1,7 +1,7 @@
 # Resize transform to apply to the RGB image sent to the global appearance model
 resize:
   size: [240, 320]  # Model trained on 320x240 images
-  object_focus: True
+  object_focus: true
 
 # Size of images on which the tracking is performed
 image_size:
@@ -42,4 +42,4 @@ local_segmentation_model:
     output_logits: false
 
 # Checkpoint to load
-ckpt_path: "weights/probabilistic_segmentation_clines.ckpt"
+ckpt_path: "weights/probabilistic_segmentation_clines_object_focus.ckpt"
