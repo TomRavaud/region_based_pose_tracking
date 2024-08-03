@@ -31,6 +31,7 @@ def track(config: omegaconf.DictConfig) -> int:
         name="tracker",
         synchronize_cameras=False,
     )
+    # TODO: parameter in config file
     tracker.n_corr_iterations = 7
 
     # Set up renderer geometry
@@ -173,6 +174,7 @@ def track(config: omegaconf.DictConfig) -> int:
         silhouette_renderer.AddReferencedBody(body)
         region_modality.UseRegionChecking(silhouette_renderer)
     
+    # TODO: parameters in config file
     # RBOT specific parameters (see Stoiber PhD thesis)
     region_modality.function_amplitude = 0.36
     region_modality.function_slope = 0.0
