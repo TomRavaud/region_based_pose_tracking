@@ -1,0 +1,35 @@
+# Resize transform to apply to the RGB image sent to the global appearance model
+resize:
+  size: [240, 320]  # Model trained on 320x240 images
+
+# Size of images on which the tracking is performed
+image_size:
+  height: 512  # RBOT/BCOT images are 640x512
+  width: 640
+
+# Visualization parameters
+visualization:
+  segmentation: false
+  bbox_and_mask: false
+
+# Global appearance model
+global_appearance_model:
+  name: SimpleResNet
+  params:
+    version: 34
+    nb_input_channels: 4
+    # output_dim: automatically set depending on the number of parameters
+    # of the local segmentation model
+    output_logits: true
+
+# Local segmentation model
+local_segmentation_model:
+  name: MLP
+  params:
+    patch_size: 5
+    mlp_hidden_dims: [64, 32, 16]
+    output_logits: false
+
+
+# Checkpoint to load
+ckpt_path: "weights/probabilistic_segmentation.ckpt"

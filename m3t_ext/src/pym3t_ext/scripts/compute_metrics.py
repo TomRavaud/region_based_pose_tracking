@@ -218,7 +218,7 @@ def compute_metrics(config: omegaconf.DictConfig) -> None:
 if __name__ == "__main__":
     
     # Configuration file path
-    config_path = Path("config/compute_metrics.yaml")
+    config_path = Path("configs/scripts/compute_metrics.yaml")
 
     # Read config file
     config = omegaconf.OmegaConf.load(config_path)

@@ -162,7 +162,7 @@ class CropResizeToObjectTransform:
     def __init__(
         self,
         resize: tuple = (480, 640),
-        scale_factor: float = 1.5,
+        scale_factor: float = 2.0,
     ) -> None:
         """Constructor.
 
@@ -170,7 +170,7 @@ class CropResizeToObjectTransform:
             resize (Resolution, optional): Target aspect ratio (height, width).
                 Defaults to (480, 640).
             scale_factor (float, optional): Scale factor to expand the bounding box.
-                Defaults to 1.5.
+                Defaults to 2.0.
 
         Raises:
             ValueError: If the width is less than the height.

@@ -1,0 +1,45 @@
+# Resize transform to apply to the RGB image sent to the global appearance model
+resize:
+  size: [240, 320]  # Model trained on 320x240 images
+  object_focus: True
+
+# Size of images on which the tracking is performed
+image_size:
+  height: 512  # RBOT/BCOT images are 640x512
+  width: 640
+
+# Lines information (should be consistent with the parameters of the C++ tracker, ie
+# >= length and >= number)
+correspondence_lines:
+  max_length: 120
+  max_number: 200
+
+# Visualization parameters
+visualization:
+  segmentation: false
+  bbox_and_mask: false
+
+# Global appearance model
+global_appearance_model:
+  name: SimpleResNet
+  params:
+    version: 34
+    nb_input_channels: 4
+    output_dim: [512,]
+    output_logits: true
+
+# Local segmentation model
+local_segmentation_model:
+  name: UNet1d
+  params:
+    in_channels: 3
+    out_channels: 1
+    channels_list: [16, 32, 64, 128]
+    nb_layers_per_block_encoder: 2
+    nb_layers_bridge: 2
+    nb_layers_per_block_decoder: 2
+    film_dim: 512
+    output_logits: false
+
+# Checkpoint to load
+ckpt_path: "weights/probabilistic_segmentation_clines.ckpt"

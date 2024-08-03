@@ -1,3 +1,13 @@
+"""
+Region modality which replaces the standard color histograms with a probabilistic
+segmentation model. The probabilistic segmentation model consists of a global
+appearance model which predicts a context vector used to condition a local segmentation
+model (U-Net), which in turn predicts the probabilistic segmentation of lines in the
+image (line by line).
+"""
+# Standard libraries
+from pathlib import Path
+
 # Third-party libraries
 import torch
 import cv2
@@ -8,6 +18,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.collections import LineCollection
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+import omegaconf
 
 # Custom libraries
 import pym3t
@@ -24,6 +35,7 @@ from pym3t_ext.toolbox.utils.crop_resize_transform import (
     CropResizeToAspectTransform,
     CropResizeToObjectTransform,
 )
+from pym3t_ext.toolbox.utils.match_state_dict import match_state_dict
 
 
 class DeepCLinesRegionModality(pym3t.RegionModalityBase):
@@ -33,25 +45,34 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
     # Model used for prediction
     _prediction_module = None
     
-    # Model trained on 320x240 images
-    _segmentation_size = (240, 320)
-    _crop_resize_transform = CropResizeToAspectTransform(
-        resize=_segmentation_size,
+    # Load config file
+    _config = omegaconf.OmegaConf.load(
+        Path("configs/modalities/deep_clines_region_modality.yaml")
     )
-    # _crop_resize_transform = CropResizeToObjectTransform(
-    #     resize=_segmentation_size,
-    #     scale_factor=2.,
-    # )
+    if _config.resize.object_focus:
+        _crop_resize_transform = CropResizeToObjectTransform(
+            resize=_config.resize.size,
+        )
+    else:
+        _crop_resize_transform = CropResizeToAspectTransform(
+            resize=_config.resize.size,
+        )
     
-    # RBOT images are 640x512
-    _original_image_size = (512, 640)
+    _original_image_size = (
+        _config.image_size.height,
+        _config.image_size.width,
+    )
     
     # Lines information
-    _clines_max_length = 120
-    _clines_max_number = 200
+    _clines_max_length = _config.correspondence_lines.max_length
+    _clines_max_number = _config.correspondence_lines.max_number
     
     # Set the device to use
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Visualization parameters
+    _visualize_segmentation = _config.visualization.segmentation
+    _visualize_bbox_and_mask = _config.visualization.bbox_and_mask
     
     
     def start_modality(self, iteration: int, corr_iteration: int) -> bool:
@@ -99,7 +120,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
             bbox,
             clines_segmentation_only=False,
             context_vectors_prediction_only=True,
-            visualize=True,
+            visualize=self._visualize_bbox_and_mask,
         )
         
         return True
@@ -110,58 +131,28 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
         """
         # Load pre-trained weights
         train_module_state_dict = torch.load(
-            "weights/probabilistic_segmentation_clines.ckpt"
+            self._config.ckpt_path,
         ).get("state_dict")
         
-        simple_resnet_34 = SimpleResNet(
-            version=34,
-            nb_input_channels=4,
-            output_dim=[512,],
-            output_logits=True,
-        )
-        line_segmentation_model = UNet1d(
-            in_channels=3,
-            out_channels=1,
-            channels_list=[16, 32, 64, 128],
-            nb_layers_per_block_encoder=2,
-            nb_layers_bridge=2,
-            nb_layers_per_block_decoder=2,
-            film_dim=512,
-            output_logits=False,
-        )
+        # Instantiate the global appearance model
+        global_appearance_model =\
+            globals().get(self._config.global_appearance_model.name)(
+                **self._config.global_appearance_model.params
+            )
+        # Instantiate the line segmentation model
+        line_segmentation_model =\
+            globals().get(self._config.local_segmentation_model.name)(
+                **self._config.local_segmentation_model.params
+            )
         probabilistic_segmentation_model = ProbabilisticSegmentationUNet(
-            net=simple_resnet_34,
+            net=global_appearance_model,
             line_segmentation_model=line_segmentation_model,
             apply_color_transformations=False,
         )
-        
         # Instantiate the model used for prediction
         self._prediction_module = ObjectSegmentationCLinesPredictionModule(
             probabilistic_segmentation_model=probabilistic_segmentation_model,
-        )
-        
-        def match_state_dict(state_dict: dict, model: torch.nn.Module) -> dict:
-            """Extract the state_dict of the model from an other state_dict by matching
-            their keys.
-
-            Args:
-                state_dict (dict): The state_dict from which to extract the model's
-                    state_dict.
-                model (torch.nn.Module): The model for which to extract the state_dict.
-
-            Returns:
-                dict: The state_dict of the model.
-            """
-            model_state_dict = model.state_dict()
-            new_state_dict = {
-                key: value
-                for key, value in state_dict.items()
-                if key in model_state_dict
-            }
-
-            model_state_dict.update(new_state_dict)
-
-            return model_state_dict
+        ) 
 
         # Get the state_dict of the model used for prediction from the pretrained model
         prediction_module_state_dict = match_state_dict(
@@ -355,7 +346,8 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 
                 # Display the SAM binary mask
                 _, ax = plt.subplots()
-                mask = self._prediction_module.model.binary_masks.squeeze().cpu().numpy()
+                mask =\
+                    self._prediction_module.model.binary_masks.squeeze().cpu().numpy()
                 ax.imshow(np.where(mask[..., None], image_to_display, 0))
                 ax.axis("off")
                 plt.tight_layout()
@@ -523,7 +515,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
                 clines_coordinates=clines_coordinates,
                 clines_segmentation_only=True,
                 context_vectors_prediction_only=False,
-                visualize=False,
+                visualize=self._visualize_segmentation,
             )
             
             # Go through the valid data lines
@@ -616,7 +608,7 @@ class DeepCLinesRegionModality(pym3t.RegionModalityBase):
             bbox,
             clines_segmentation_only=False,
             context_vectors_prediction_only=True,
-            visualize=True,
+            visualize=self._visualize_bbox_and_mask,
         )
         
         return True

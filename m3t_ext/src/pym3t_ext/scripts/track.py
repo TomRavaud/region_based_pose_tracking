@@ -284,7 +284,7 @@ def track(config: omegaconf.DictConfig) -> int:
 
 if __name__ == "__main__":
     # Configuration file path
-    config_path = Path("config/track_example_rbot.yaml")
+    config_path = Path("configs/scripts/track_example_rbot.yaml")
 
     # Read config file
     config = omegaconf.OmegaConf.load(config_path)

@@ -1,3 +1,13 @@
+"""
+Region modality which replaces the standard color histograms with a probabilistic
+segmentation model. The probabilistic segmentation model consists of a global
+appearance model which predicts the parameters (weights and biases) of a local
+segmentation model (MLP), which in turn predicts the probabilistic segmentation
+mask of the image pixel-wise.
+"""
+# Standard libraries
+from pathlib import Path
+
 # Third-party libraries
 import torch
 import cv2
@@ -5,6 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import omegaconf
 
 # Custom libraries
 import pym3t
@@ -18,6 +29,7 @@ from pym3t_ext.toolbox.modules.probabilistic_segmentation_mlp import (
 from pym3t_ext.toolbox.modules.simple_resnet_module import SimpleResNet
 from pym3t_ext.toolbox.utils.partialclass import partialclass
 from pym3t_ext.toolbox.utils.crop_resize_transform import CropResizeToAspectTransform
+from pym3t_ext.toolbox.utils.match_state_dict import match_state_dict
 
 
 class DeepRegionModality(pym3t.RegionModalityBase):
@@ -26,21 +38,28 @@ class DeepRegionModality(pym3t.RegionModalityBase):
     """
     # Model used for prediction
     _prediction_module = None
-    
     # Probabilistic segmentation mask
     _predicted_probabilistic_mask = None
     
-    # Model trained on 320x240 images
-    _segmentation_size = (240, 320)
+    # Load config file
+    _config = omegaconf.OmegaConf.load(
+        Path("configs/modalities/deep_region_modality.yaml")
+    )
     _crop_resize_transform = CropResizeToAspectTransform(
-        resize=_segmentation_size,
+        resize=_config.resize.size,
     )
     
-    # RBOT images are 640x512
-    _original_image_size = (512, 640)
+    _original_image_size = (
+        _config.image_size.height,
+        _config.image_size.width,
+    )
     
     # Set the device to use
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Visualization parameters
+    _visualize_segmentation = _config.visualization.segmentation
+    _visualize_bbox_and_mask = _config.visualization.bbox_and_mask
     
     
     def start_modality(self, iteration: int, corr_iteration: int) -> bool:
@@ -88,7 +107,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
             bbox,
             pixel_segmentation_only=False,
             mlp_parameters_prediction_only=True,
-            visualize=True,
+            visualize=self._visualize_bbox_and_mask,
         )
         
         return True
@@ -99,52 +118,24 @@ class DeepRegionModality(pym3t.RegionModalityBase):
         """
         # Load pre-trained weights
         train_module_state_dict = torch.load(
-            "weights/probabilistic_segmentation_2.ckpt"
+            self._config.ckpt_path,
         ).get("state_dict")
         
-        SimpleResNet34 = partialclass(
-            SimpleResNet,
-            version=34,
-            nb_input_channels=4,
-            output_logits=True,
+        # Class of the global appearance model (set some parameters)
+        GlobalAppearanceModel = partialclass(
+            globals()[self._config.global_appearance_model.name],
+            **self._config.global_appearance_model.params,
         )
-
         probabilistic_segmentation_model = ProbabilisticSegmentationMLP(
-            net_cls=SimpleResNet34,
-            patch_size=5,
-            mlp_hidden_dims=[64, 32, 16],
-            apply_color_transformations=False,
-            output_logits=False,
-        )
-        
+                GlobalAppearanceModel,
+                **self._config.local_segmentation_model.params,
+                apply_color_transformations=False,
+            )
         # Instantiate the model used for prediction
         self._prediction_module = ObjectSegmentationPredictionModule(
             probabilistic_segmentation_model=probabilistic_segmentation_model,
         )
         
-        def match_state_dict(state_dict: dict, model: torch.nn.Module) -> dict:
-            """Extract the state_dict of the model from an other state_dict by matching
-            their keys.
-
-            Args:
-                state_dict (dict): The state_dict from which to extract the model's
-                    state_dict.
-                model (torch.nn.Module): The model for which to extract the state_dict.
-
-            Returns:
-                dict: The state_dict of the model.
-            """
-            model_state_dict = model.state_dict()
-            new_state_dict = {
-                key: value
-                for key, value in state_dict.items()
-                if key in model_state_dict
-            }
-
-            model_state_dict.update(new_state_dict)
-
-            return model_state_dict
-
         # Get the state_dict of the model used for prediction from the pretrained model
         prediction_module_state_dict = match_state_dict(
             train_module_state_dict,
@@ -259,8 +250,9 @@ class DeepRegionModality(pym3t.RegionModalityBase):
             
             if visualize:
                 # Display the image
+                image_to_display = input.rgbs.squeeze().permute(1, 2, 0).cpu().numpy()
                 _, ax = plt.subplots()
-                ax.imshow(input.rgbs.squeeze().permute(1, 2, 0).cpu().numpy())
+                ax.imshow(image_to_display)
                 rect = patches.Rectangle(
                     (bbox[0, 0], bbox[0, 1]),
                     bbox[1, 0] - bbox[0, 0],
@@ -272,6 +264,15 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                 ax.add_patch(rect)
                 ax.axis("off")
                 plt.tight_layout()
+                
+                # Display the SAM binary mask
+                _, ax = plt.subplots()
+                mask =\
+                    self._prediction_module.model.binary_masks.squeeze().cpu().numpy()
+                ax.imshow(np.where(mask[..., None], image_to_display, 0))
+                ax.axis("off")
+                plt.tight_layout()
+                
                 plt.show()
                 
             return
@@ -361,7 +362,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
                     bbox=None,
                     pixel_segmentation_only=True,
                     mlp_parameters_prediction_only=False,
-                    visualize=True
+                    visualize=self._visualize_segmentation,
                 )
         
         # Differentiate cases with and without occlusion handling:
@@ -501,7 +502,7 @@ class DeepRegionModality(pym3t.RegionModalityBase):
             bbox,
             pixel_segmentation_only=False,
             mlp_parameters_prediction_only=True,
-            visualize=True
+            visualize=self._visualize_bbox_and_mask,
         )
 
         return True

@@ -58,7 +58,7 @@ def evaluate(config: omegaconf.DictConfig) -> None:
 
 if __name__ == "__main__":
     # Configuration file path
-    config_path = Path("config/evaluate_bcot.yaml")
+    config_path = Path("configs/scripts/evaluate_bcot.yaml")
 
     # Read config file
     config = omegaconf.OmegaConf.load(config_path)
