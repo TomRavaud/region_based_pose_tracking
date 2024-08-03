@@ -9,7 +9,7 @@ geometry_unit_in_meter: 0.001
 
 # Modality to use for tracking
 # (region_modality or deep_region_modality or deep_clines_region_modality)
-modality: deep_region_modality
+modality: region_modality
 
 # Whether to reset the pose of the object if the tracking is lost regarding
 # the given criterion
