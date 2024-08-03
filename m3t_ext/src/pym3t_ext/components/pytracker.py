@@ -106,7 +106,7 @@ class PyTracker(pym3t.Tracker):
             try:
                 metric_class = getattr(custom_metrics, metric_class_name)
             except AttributeError:
-                print(f"Unknown metric: {metric_class_name}")
+                raise ValueError(f"Unknown metric: {metric_class_name}")
             # Instantiate the metric by passing the parameters
             try:
                 my_metric = metric_class(**criterion[metric_class_name])
