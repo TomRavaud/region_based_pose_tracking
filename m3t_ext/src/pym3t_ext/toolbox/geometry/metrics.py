@@ -150,25 +150,6 @@ class VerticesMetric(Metric, ABC):
         self._load_vertices()
         self._compute_model_diameter()
         
-    # @property
-    # def model_file(self) -> Path:
-    #     """Get the path to the model file.
-
-    #     Returns:
-    #         Path: Path to the model file.
-    #     """
-    #     return self._model_file
-    
-    # @property
-    # def model_name(self) -> str:
-    #     """Get the name of the model.
-
-    #     Returns:
-    #         str: Name of the model.
-    #     """
-    #     return self._model_file.stem
-    
-    
     def _load_vertices(self) -> None:
         """Load the vertices of the model."""
         # Extract the vertices from the model
